@@ -1,0 +1,24 @@
+#gamecontainer {
+  width: 960px;
+  height: 540px;
+  border: 1px solid black;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Level Selection Screen */
+#levelselectscreen {
+  padding-top: 150px;
+  padding-left: 50px;
+}
+
+#levelselectscreen input {
+  margin: 20px;
+  cursor: pointer;
+  background: url(/assets/images/icons/nivel1.jpg) no-repeat;
+  font-size: 20px;
+  width: 64px;
+  height: 64px;
+  border: 0;
+}
