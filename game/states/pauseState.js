@@ -1,47 +1,24 @@
 // Estado de Pausa - Siguiendo principios de Pro HTML5 Games
 import { loader } from "../../engine/loader.js";
+import { UIHelpers } from "../utils/uiHelpers.js";
 
 class PauseState {
   constructor(canvas, stateManager) {
     this.canvas = canvas;
     this.stateManager = stateManager;
-    this.backgroundState = null; // Estado que está detrás (el juego)
-    this.previousState = "level1"; // Estado al que volver cuando se reanude
-
-    // Configuración del panel de pausa
-    this.panel = {
-      x: 0,
-      y: 0,
-      width: 400,
-      height: 450,
-      cornerRadius: 20,
-      backgroundColor: "rgba(50, 50, 50, 0.95)",
-    };
-
-    // Botones del menú de pausa
-    this.buttons = {
-      reanudar: { x: 0, y: 0, width: 0, height: 0 },
-      reiniciar: { x: 0, y: 0, width: 0, height: 0 },
-      settings: { x: 0, y: 0, width: 0, height: 0 },
-      menuPrincipal: { x: 0, y: 0, width: 0, height: 0 },
-    };
-
-    // Estado del submenú (null, 'settings', 'controls')
+    this.backgroundState = null;
+    this.previousState = "level1";
     this.subMenuState = null;
 
-    // Configuraciones copiadas de settingsState
-    this.settings = {
-      difficulty: "medio",
-      music: true,
-      soundEffects: true,
-    };
-
-    // Botones de settings cuando está en submenú
-    this.settingsButtons = {
-      controles: { x: 0, y: 0, width: 0, height: 0 },
-      musica: { x: 0, y: 0, width: 0, height: 0 },
-      efectos_sonido: { x: 0, y: 0, width: 0, height: 0 },
-      atras: { x: 0, y: 0, width: 0, height: 0 },
+    this.panel = { x: 0, y: 0, width: 400, height: 450, cornerRadius: 20, backgroundColor: "rgba(50, 50, 50, 0.95)" };
+    this.buttons = { reanudar: {}, reiniciar: {}, settings: {}, menuPrincipal: {} };
+    this.settingsButtons = { controles: {}, musica: {}, efectos_sonido: {}, atras: {}, hud: {} };
+    this.settings = { difficulty: "medio", contrast: 1.0, music: true, soundEffects: true };
+    
+    this.volumeSliders = {
+      music: { x: 0, y: 0, width: 200, height: 20, handleRadius: 10, isDragging: false },
+      effects: { x: 0, y: 0, width: 200, height: 20, handleRadius: 10, isDragging: false },
+      contrast: { x: 0, y: 0, width: 200, height: 20, handleRadius: 10, isDragging: false },
     };
   }
 
@@ -53,7 +30,26 @@ class PauseState {
 
   enter() {
     console.log("Juego pausado");
-    this.subMenuState = null;
+    // Solo resetear subMenuState si no está establecido (para preservar cuando viene de hudConfig)
+    if (!this.subMenuState) {
+      this.subMenuState = null;
+    }
+    this.menuMusic = document.getElementById('menuMusic');
+    this.gameMusic = document.getElementById('gameMusic');
+    
+    const activeMusic = this.gameMusic && !this.gameMusic.paused ? this.gameMusic : this.menuMusic;
+    
+    if (activeMusic) {
+      this.settings.music = !activeMusic.muted;
+      this.settings.musicVolume = activeMusic.volume;
+    }
+    if (window.gameConfig) {
+      Object.assign(this.settings, {
+        soundEffects: window.gameConfig.soundEffectsEnabled,
+        effectsVolume: window.gameConfig.effectsVolume,
+        contrast: window.gameConfig.contrast
+      });
+    }
   }
 
   update(dt) {
@@ -80,221 +76,139 @@ class PauseState {
     }
   }
 
+  renderButton(ctx, imageName, centerX, y, buttonKey) {
+    const result = UIHelpers.renderCenteredButton(ctx, imageName, centerX, y);
+    if (result) this.buttons[buttonKey] = result;
+  }
+
+  renderSettingsButton(ctx, imageName, centerX, y, buttonKey) {
+    const result = UIHelpers.renderCenteredButton(ctx, imageName, centerX, y);
+    if (result) this.settingsButtons[buttonKey] = result;
+  }
+
   renderPauseMenu(ctx) {
-    // Calcular posición central del panel
     this.panel.x = (this.canvas.width - this.panel.width) / 2;
     this.panel.y = (this.canvas.height - this.panel.height) / 2;
 
-    // Dibujar panel con esquinas redondeadas
-    this.drawRoundedRect(
-      ctx,
-      this.panel.x,
-      this.panel.y,
-      this.panel.width,
-      this.panel.height,
-      this.panel.cornerRadius,
-      this.panel.backgroundColor
-    );
+    UIHelpers.drawRoundedRect(ctx, this.panel.x, this.panel.y, this.panel.width, this.panel.height,
+                         this.panel.cornerRadius, this.panel.backgroundColor);
 
-    // Título "PAUSA"
     ctx.fillStyle = "#fff";
     ctx.font = "bold 48px system-ui";
     ctx.textAlign = "center";
     ctx.fillText("PAUSA", this.canvas.width / 2, this.panel.y + 70);
 
-    // Posiciones de los botones dentro del panel
     const centerX = this.canvas.width / 2;
     const startY = this.panel.y + 75;
     const spacing = 80;
 
-    // Botón Reanudar
-    const reanudarBtn = loader.getImage("reanudar");
-    if (reanudarBtn) {
-      const btnX = centerX - reanudarBtn.width / 2;
-      const btnY = startY;
-      ctx.drawImage(reanudarBtn, btnX, btnY);
-      this.buttons.reanudar = {
-        x: btnX,
-        y: btnY,
-        width: reanudarBtn.width,
-        height: reanudarBtn.height,
-      };
-    }
+    ['reanudar', 'reiniciar', 'settings', 'menu_principal'].forEach((name, i) => {
+      const key = name === 'menu_principal' ? 'menuPrincipal' : name;
+      this.renderButton(ctx, name, centerX, startY + spacing * i, key);
+    });
 
-    // Botón Reiniciar
-    const reiniciarBtn = loader.getImage("reiniciar");
-    if (reiniciarBtn) {
-      const btnX = centerX - reiniciarBtn.width / 2;
-      const btnY = startY + spacing;
-      ctx.drawImage(reiniciarBtn, btnX, btnY);
-      this.buttons.reiniciar = {
-        x: btnX,
-        y: btnY,
-        width: reiniciarBtn.width,
-        height: reiniciarBtn.height,
-      };
-    }
-
-    // Botón Settings
-    const settingsBtn = loader.getImage("settings");
-    if (settingsBtn) {
-      const btnX = centerX - settingsBtn.width / 2;
-      const btnY = startY + spacing * 2;
-      ctx.drawImage(settingsBtn, btnX, btnY);
-      this.buttons.settings = {
-        x: btnX,
-        y: btnY,
-        width: settingsBtn.width,
-        height: settingsBtn.height,
-      };
-    }
-
-    // Botón Menú Principal
-    const menuPrincipalBtn = loader.getImage("menu_principal");
-    if (menuPrincipalBtn) {
-      const btnX = centerX - menuPrincipalBtn.width / 2;
-      const btnY = startY + spacing * 3;
-      ctx.drawImage(menuPrincipalBtn, btnX, btnY);
-      this.buttons.menuPrincipal = {
-        x: btnX,
-        y: btnY,
-        width: menuPrincipalBtn.width,
-        height: menuPrincipalBtn.height,
-      };
-    }
-
-    // Indicación de tecla ESC
     ctx.fillStyle = "#aaa";
     ctx.font = "16px system-ui";
-    ctx.fillText(
-      "Presiona ESC para reanudar",
-      this.canvas.width / 2,
-      this.panel.y + this.panel.height - 20
-    );
+    ctx.fillText("Presiona ESC para reanudar", this.canvas.width / 2, this.panel.y + this.panel.height - 20);
   }
 
   renderSettingsMenu(ctx) {
-    // Panel para settings (sin dificultad)
-    const settingsPanel = {
-      x: (this.canvas.width - 500) / 2,
-      y: (this.canvas.height - 450) / 2,
-      width: 550,
-      height: 450,
-    };
+    const panel = { x: (this.canvas.width - 700) / 2, y: (this.canvas.height - 450) / 2, width: 700, height: 450 };
+    
+    UIHelpers.drawRoundedRect(ctx, panel.x, panel.y, panel.width, panel.height, this.panel.cornerRadius, this.panel.backgroundColor);
 
-    // Dibujar panel con esquinas redondeadas
-    this.drawRoundedRect(
-      ctx,
-      settingsPanel.x,
-      settingsPanel.y,
-      settingsPanel.width,
-      settingsPanel.height,
-      this.panel.cornerRadius,
-      this.panel.backgroundColor
-    );
-
-    // Título "CONFIGURACIÓN"
     ctx.fillStyle = "#fff";
-    ctx.font = "bold 36px system-ui";
+    ctx.font = "bold 32px system-ui";
     ctx.textAlign = "center";
-    ctx.fillText("CONFIGURACIÓN", this.canvas.width / 2, settingsPanel.y + 60);
+    ctx.fillText("CONFIGURACIÓN", this.canvas.width / 2, panel.y + 50);
 
-    // Posiciones centrales para los botones
-    const centerX = this.canvas.width / 2;
-    const startY = settingsPanel.y + 75;
-    const spacing = 80;
+    const centerX = this.canvas.width / 2 - 110;
+    const startY = panel.y + 80;
+    const spacing = 85;
 
-    // Botón Controles
-    const controlesBtn = loader.getImage("controles");
-    if (controlesBtn) {
-      const btnX = centerX - controlesBtn.width / 2;
-      const btnY = startY;
-      ctx.drawImage(controlesBtn, btnX, btnY);
-      this.settingsButtons.controles = {
-        x: btnX,
-        y: btnY,
-        width: controlesBtn.width,
-        height: controlesBtn.height,
-      };
-    }
+    // Controles
+    this.renderSettingsButton(ctx, "controles", centerX, startY, "controles");
 
-    // Botón Música
-    const musicaBtn = loader.getImage("musica");
-    if (musicaBtn) {
-      const btnX = centerX - musicaBtn.width / 2;
+    // Música con estado y slider
+    const musicBtn = loader.getImage("musica");
+    if (musicBtn) {
+      const btnX = centerX - musicBtn.width / 2;
       const btnY = startY + spacing;
-      ctx.drawImage(musicaBtn, btnX, btnY);
-      this.settingsButtons.musica = {
-        x: btnX,
-        y: btnY,
-        width: musicaBtn.width,
-        height: musicaBtn.height,
-      };
+      ctx.drawImage(musicBtn, btnX, btnY);
+      this.settingsButtons.musica = { x: btnX, y: btnY, width: musicBtn.width, height: musicBtn.height };
 
-      // Texto de estado
-      ctx.font = "20px system-ui";
+      ctx.font = "18px system-ui";
       ctx.textAlign = "left";
-      const estadoMusica = this.settings.music ? "ENCENDIDO" : "APAGADO";
       ctx.fillStyle = this.settings.music ? "#00ff00" : "#ff0000";
-      ctx.fillText(
-        estadoMusica,
-        btnX + musicaBtn.width + 15,
-        btnY + musicaBtn.height / 2 + 6
-      );
+      ctx.fillText(this.settings.music ? "ENCENDIDO" : "APAGADO", btnX + musicBtn.width + 35, btnY + 30);
+      
+      if (this.settings.music) {
+        const sliderX = btnX + musicBtn.width + 35, sliderY = btnY + 45;
+        this.volumeSliders.music = { x: sliderX, y: sliderY, width: 200, height: 20 };
+        UIHelpers.drawSlider(ctx, sliderX, sliderY, 200, 20, this.settings.musicVolume, 'volume');
+      }
     }
 
-    // Botón Efectos de Sonido
+    // Efectos con estado y slider
     const efectosBtn = loader.getImage("efectos_sonido");
     if (efectosBtn) {
       const btnX = centerX - efectosBtn.width / 2;
       const btnY = startY + spacing * 2;
       ctx.drawImage(efectosBtn, btnX, btnY);
-      this.settingsButtons.efectos_sonido = {
-        x: btnX,
-        y: btnY,
-        width: efectosBtn.width,
-        height: efectosBtn.height,
-      };
+      this.settingsButtons.efectos_sonido = { x: btnX, y: btnY, width: efectosBtn.width, height: efectosBtn.height };
 
-      // Texto de estado
-      const estadoEfectos = this.settings.soundEffects
-        ? "ENCENDIDO"
-        : "APAGADO";
+      ctx.font = "18px system-ui";
       ctx.fillStyle = this.settings.soundEffects ? "#00ff00" : "#ff0000";
-      ctx.fillText(
-        estadoEfectos,
-        btnX + efectosBtn.width + 15,
-        btnY + efectosBtn.height / 2 + 6
-      );
+      ctx.fillText(this.settings.soundEffects ? "ENCENDIDO" : "APAGADO", btnX + efectosBtn.width + 20, btnY + 30);
+      
+      if (this.settings.soundEffects) {
+        const sliderX = btnX + efectosBtn.width + 20, sliderY = btnY + 50;
+        this.volumeSliders.effects = { x: sliderX, y: sliderY, width: 200, height: 20 };
+        UIHelpers.drawSlider(ctx, sliderX, sliderY, 200, 20, this.settings.effectsVolume, 'volume');
+      }
     }
 
-    // Botón Atrás
+    // Contraste
+    const rightColX = this.canvas.width / 2 + 100;
+    ctx.font = "bold 24px system-ui";
+    ctx.fillStyle = "#fff";
+    ctx.fillText("Contraste", rightColX - 27, startY + 20);
+    const contrastSliderX = rightColX - 25, contrastSliderY = startY + 40;
+    this.volumeSliders.contrast = { x: contrastSliderX, y: contrastSliderY, width: 200, height: 20 };
+    UIHelpers.drawSlider(ctx, contrastSliderX, contrastSliderY, 200, 20, (this.settings.contrast - 0.0) / 2.0, 'contrast');
+
+    // Botones inferiores: Atrás y HUD lado a lado
+    const bottomY = startY + spacing * 3;  // Posición Y del botón Atrás
+    const hudYPosition = startY + spacing * 3 + 15;  // ← Posición Y del botón HUD (cámbiala aquí)
+    const btnSpacing = 20;
+    
+    // Calcular posiciones centradas en el panel
     const atrasBtn = loader.getImage("atras");
+    const hudBtnWidth = 150;
+    const hudBtnHeight = 50;
+    const totalWidth = (atrasBtn ? atrasBtn.width : 150) + btnSpacing + hudBtnWidth;
+    const startX = (this.canvas.width - totalWidth) / 2;
+    
+    // Botón Atrás (izquierda)
     if (atrasBtn) {
-      const btnX = centerX - atrasBtn.width / 2;
-      const btnY = startY + spacing * 3;
-      ctx.drawImage(atrasBtn, btnX, btnY);
-      this.settingsButtons.atras = {
-        x: btnX,
-        y: btnY,
-        width: atrasBtn.width,
-        height: atrasBtn.height,
-      };
+      const atrasX = startX;
+      ctx.drawImage(atrasBtn, atrasX, bottomY);
+      this.settingsButtons.atras = { x: atrasX, y: bottomY, width: atrasBtn.width, height: atrasBtn.height };
     }
+    
+    // Botón HUD (derecha)
+    const hudX = startX + (atrasBtn ? atrasBtn.width : 150) + btnSpacing + 50;
+    this.settingsButtons.hud = UIHelpers.drawCustomButton(ctx, 'HUD', hudX, hudYPosition, hudBtnWidth, hudBtnHeight);
+    
+    console.log('Botón HUD renderizado en:', this.settingsButtons.hud);
 
-    // Indicación de tecla ESC
     ctx.fillStyle = "#aaa";
     ctx.font = "14px system-ui";
     ctx.textAlign = "center";
-    ctx.fillText(
-      "Presiona ESC para volver al menú de pausa",
-      this.canvas.width / 2,
-      settingsPanel.y + settingsPanel.height - 15
-    );
+    ctx.fillText("Presiona ESC para volver al menú de pausa", this.canvas.width / 2, panel.y + panel.height - 15);
   }
-
+  
   renderControlsMenu(ctx) {
-    // Panel para mostrar la imagen de controles
     const controlsPanel = {
       x: (this.canvas.width - 700) / 2,
       y: (this.canvas.height - 500) / 2,
@@ -302,8 +216,7 @@ class PauseState {
       height: 500,
     };
 
-    // Dibujar panel con esquinas redondeadas
-    this.drawRoundedRect(
+    UIHelpers.drawRoundedRect(
       ctx,
       controlsPanel.x,
       controlsPanel.y,
@@ -370,119 +283,48 @@ class PauseState {
     );
   }
 
-  // Función auxiliar para dibujar rectángulos con esquinas redondeadas
-  drawRoundedRect(ctx, x, y, width, height, radius, fillColor) {
-    ctx.fillStyle = fillColor;
-    ctx.beginPath();
-    ctx.moveTo(x + radius, y);
-    ctx.lineTo(x + width - radius, y);
-    ctx.arcTo(x + width, y, x + width, y + radius, radius);
-    ctx.lineTo(x + width, y + height - radius);
-    ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius);
-    ctx.lineTo(x + radius, y + height);
-    ctx.arcTo(x, y + height, x, y + height - radius, radius);
-    ctx.lineTo(x, y + radius);
-    ctx.arcTo(x, y, x + radius, y, radius);
-    ctx.closePath();
-    ctx.fill();
 
-    // Borde sutil
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
 
   exit() {
     console.log("Saliendo del menú de pausa");
   }
 
-  handleClick(x, y) {
-    // Si estamos en el submenú de controles
-    if (this.subMenuState === "controls") {
-      return this.handleControlsClick(x, y);
-    }
 
-    // Si estamos en el submenú de settings
+
+  handleClick(x, y) {
+    if (this.subMenuState === "controls") return this.handleControlsClick(x, y);
     if (this.subMenuState === "settings") {
+      if (this.handleSliderClick(x, y)) return "slider";
       return this.handleSettingsClick(x, y);
     }
 
-    // Manejo de clics en el menú de pausa principal
-    // Botón Reanudar
-    if (
-      x >= this.buttons.reanudar.x &&
-      x <= this.buttons.reanudar.x + this.buttons.reanudar.width &&
-      y >= this.buttons.reanudar.y &&
-      y <= this.buttons.reanudar.y + this.buttons.reanudar.height
-    ) {
-      console.log("Reanudando juego");
-      this.stateManager.setState(this.previousState);
-      return "reanudar";
-    }
-
-    // Botón Reiniciar
-    if (
-      x >= this.buttons.reiniciar.x &&
-      x <= this.buttons.reiniciar.x + this.buttons.reiniciar.width &&
-      y >= this.buttons.reiniciar.y &&
-      y <= this.buttons.reiniciar.y + this.buttons.reiniciar.height
-    ) {
-      console.log("Reiniciando nivel");
-      // Reiniciar el nivel actual ANTES de cambiar de estado
-      if (
-        this.backgroundState &&
-        typeof this.backgroundState.restart === "function"
-      ) {
-        this.backgroundState.restart();
+    // Menú principal de pausa
+    const actions = {
+      reanudar: () => { console.log("Reanudando juego"); this.stateManager.setState(this.previousState); },
+      reiniciar: () => { 
+        console.log("Reiniciando nivel");
+        if (this.backgroundState?.restart) this.backgroundState.restart();
+        this.stateManager.setState(this.previousState);
+      },
+      settings: () => { console.log("Abriendo configuración desde pausa"); this.subMenuState = "settings"; },
+      menuPrincipal: () => {
+        console.log("Regresando al menú principal");
+        if (this.backgroundState?.restart) this.backgroundState.restart();
+        this.stateManager.setState("menu");
       }
-      this.stateManager.setState(this.previousState);
-      return "reiniciar";
-    }
+    };
 
-    // Botón Settings
-    if (
-      x >= this.buttons.settings.x &&
-      x <= this.buttons.settings.x + this.buttons.settings.width &&
-      y >= this.buttons.settings.y &&
-      y <= this.buttons.settings.y + this.buttons.settings.height
-    ) {
-      console.log("Abriendo configuración desde pausa");
-      this.subMenuState = "settings";
-      return "settings";
-    }
-
-    // Botón Menú Principal
-    if (
-      x >= this.buttons.menuPrincipal.x &&
-      x <= this.buttons.menuPrincipal.x + this.buttons.menuPrincipal.width &&
-      y >= this.buttons.menuPrincipal.y &&
-      y <= this.buttons.menuPrincipal.y + this.buttons.menuPrincipal.height
-    ) {
-      console.log("Regresando al menú principal");
-
-      // Resetear el nivel antes de ir al menú principal
-      if (
-        this.backgroundState &&
-        typeof this.backgroundState.restart === "function"
-      ) {
-        this.backgroundState.restart();
+    for (const [key, action] of Object.entries(actions)) {
+      if (UIHelpers.isPointInButton(x, y, this.buttons[key])) {
+        action();
+        return key;
       }
-
-      this.stateManager.setState("menu");
-      return "menuPrincipal";
     }
-
     return null;
   }
 
   handleControlsClick(x, y) {
-    // Botón Atrás en la pantalla de controles
-    if (
-      x >= this.settingsButtons.atras.x &&
-      x <= this.settingsButtons.atras.x + this.settingsButtons.atras.width &&
-      y >= this.settingsButtons.atras.y &&
-      y <= this.settingsButtons.atras.y + this.settingsButtons.atras.height
-    ) {
+    if (UIHelpers.isPointInButton(x, y, this.settingsButtons.atras)) {
       console.log("Regresando al menú de configuración");
       this.subMenuState = "settings";
       return "atras";
@@ -491,65 +333,146 @@ class PauseState {
   }
 
   handleSettingsClick(x, y) {
-    // Botón Atrás
-    if (
-      x >= this.settingsButtons.atras.x &&
-      x <= this.settingsButtons.atras.x + this.settingsButtons.atras.width &&
-      y >= this.settingsButtons.atras.y &&
-      y <= this.settingsButtons.atras.y + this.settingsButtons.atras.height
-    ) {
+    console.log('Click en settings en posición:', x, y);
+    
+    // Verificar cada botón uno por uno
+    if (this.settingsButtons.hud) {
+      console.log('Verificando botón HUD:', this.settingsButtons.hud);
+      console.log(`¿Click dentro de HUD? x: ${x} >= ${this.settingsButtons.hud.x} && ${x} <= ${this.settingsButtons.hud.x + this.settingsButtons.hud.width}`);
+      console.log(`y: ${y} >= ${this.settingsButtons.hud.y} && ${y} <= ${this.settingsButtons.hud.y + this.settingsButtons.hud.height}`);
+    }
+    
+    if (UIHelpers.isPointInButton(x, y, this.settingsButtons.atras)) {
       console.log("Regresando al menú de pausa");
       this.subMenuState = null;
       return "atras";
     }
 
-    // Botón Controles
-    if (
-      x >= this.settingsButtons.controles.x &&
-      x <=
-        this.settingsButtons.controles.x +
-          this.settingsButtons.controles.width &&
-      y >= this.settingsButtons.controles.y &&
-      y <=
-        this.settingsButtons.controles.y + this.settingsButtons.controles.height
-    ) {
+    if (UIHelpers.isPointInButton(x, y, this.settingsButtons.hud)) {
+      console.log("¡Clic en botón HUD detectado!");
+      const hudConfigState = this.stateManager.states["hudConfig"];
+      if (hudConfigState && hudConfigState.enter) {
+        console.log("Estado hudConfig encontrado, configurando previousState...");
+        // Establecer un estado especial para que HUD sepa que debe regresar a pause/settings
+        hudConfigState.previousState = "pause-settings";
+        hudConfigState.pauseStateRef = this;
+      } else {
+        console.error("Estado hudConfig NO encontrado");
+      }
+      this.stateManager.setState("hudConfig");
+      return "hud";
+    }
+
+    if (UIHelpers.isPointInButton(x, y, this.settingsButtons.controles)) {
       console.log("Mostrando controles");
       this.subMenuState = "controls";
       return "controles";
     }
 
-    // Botón Música
-    if (
-      x >= this.settingsButtons.musica.x &&
-      x <= this.settingsButtons.musica.x + this.settingsButtons.musica.width &&
-      y >= this.settingsButtons.musica.y &&
-      y <= this.settingsButtons.musica.y + this.settingsButtons.musica.height
-    ) {
+    if (UIHelpers.isPointInButton(x, y, this.settingsButtons.musica)) {
       this.settings.music = !this.settings.music;
       console.log(`Música: ${this.settings.music ? "Encendida" : "Apagada"}`);
+      
+      const activeMusic = this.gameMusic && !this.gameMusic.paused ? this.gameMusic : this.menuMusic;
+      if (activeMusic) {
+        activeMusic.muted = !this.settings.music;
+        if (this.settings.music && activeMusic.paused) {
+          activeMusic.play().catch(err => console.log('Error reproduciendo música:', err));
+        }
+      }
+      if (this.menuMusic) this.menuMusic.muted = !this.settings.music;
+      if (this.gameMusic) this.gameMusic.muted = !this.settings.music;
       return "musica";
     }
 
-    // Botón Efectos de Sonido
-    if (
-      x >= this.settingsButtons.efectos_sonido.x &&
-      x <=
-        this.settingsButtons.efectos_sonido.x +
-          this.settingsButtons.efectos_sonido.width &&
-      y >= this.settingsButtons.efectos_sonido.y &&
-      y <=
-        this.settingsButtons.efectos_sonido.y +
-          this.settingsButtons.efectos_sonido.height
-    ) {
+    if (UIHelpers.isPointInButton(x, y, this.settingsButtons.efectos_sonido)) {
       this.settings.soundEffects = !this.settings.soundEffects;
-      console.log(
-        `Efectos: ${this.settings.soundEffects ? "Encendidos" : "Apagados"}`
-      );
+      console.log(`Efectos: ${this.settings.soundEffects ? "Encendidos" : "Apagados"}`);
+      
+      if (window.gameConfig) window.gameConfig.soundEffectsEnabled = this.settings.soundEffects;
+      if (this.settings.soundEffects && window.playSoundEffect) window.playSoundEffect('laserSound');
       return "efectos_sonido";
     }
 
     return null;
   }
+  
+  handleSliderClick(x, y) {
+    if (this.settings.music && UIHelpers.handleSliderInteraction(x, y, this.volumeSliders.music, (val) => {
+      this.volumeSliders.music.isDragging = true;
+      this.settings.musicVolume = val;
+      const activeMusic = this.gameMusic && !this.gameMusic.paused ? this.gameMusic : this.menuMusic;
+      if (activeMusic) activeMusic.volume = val;
+      if (this.menuMusic) this.menuMusic.volume = val;
+      if (this.gameMusic) this.gameMusic.volume = val;
+    })) return true;
+    
+    if (this.settings.soundEffects && UIHelpers.handleSliderInteraction(x, y, this.volumeSliders.effects, (val) => {
+      this.volumeSliders.effects.isDragging = true;
+      this.settings.effectsVolume = val;
+      if (window.gameConfig) window.gameConfig.effectsVolume = val;
+    })) return true;
+    
+    if (UIHelpers.handleSliderInteraction(x, y, this.volumeSliders.contrast, (val) => {
+      this.volumeSliders.contrast.isDragging = true;
+      this.settings.contrast = val * 2.0;
+      UIHelpers.applyContrast(this.settings.contrast);
+      if (window.gameConfig) window.gameConfig.contrast = this.settings.contrast;
+    })) return true;
+    
+    return false;
+  }
+
+  // Manejar movimiento del mouse para arrastre fluido
+  handleMouseMove(x, y) {
+    if (this.subMenuState !== "settings") return;
+    
+    // Arrastrar slider de música
+    if (this.volumeSliders.music.isDragging) {
+      const musicSlider = this.volumeSliders.music;
+      const newVolume = Math.max(0, Math.min(1, (x - musicSlider.x) / musicSlider.width));
+      this.settings.musicVolume = newVolume;
+      
+      const activeMusic = this.gameMusic && !this.gameMusic.paused ? this.gameMusic : this.menuMusic;
+      if (activeMusic) activeMusic.volume = newVolume;
+      if (this.menuMusic) this.menuMusic.volume = newVolume;
+      if (this.gameMusic) this.gameMusic.volume = newVolume;
+    }
+    
+    // Arrastrar slider de efectos
+    if (this.volumeSliders.effects.isDragging) {
+      const effectsSlider = this.volumeSliders.effects;
+      const newVolume = Math.max(0, Math.min(1, (x - effectsSlider.x) / effectsSlider.width));
+      this.settings.effectsVolume = newVolume;
+      
+      if (window.gameConfig) {
+        window.gameConfig.effectsVolume = newVolume;
+      }
+    }
+    
+    // Arrastrar slider de contraste
+    if (this.volumeSliders.contrast.isDragging) {
+      const contrastSlider = this.volumeSliders.contrast;
+      const newValue = Math.max(0, Math.min(1, (x - contrastSlider.x) / contrastSlider.width));
+      this.settings.contrast = newValue * 2.0;
+      
+      // Aplicar contraste
+      this.applyContrast(this.settings.contrast);
+      
+      if (window.gameConfig) {
+        window.gameConfig.contrast = this.settings.contrast;
+      }
+    }
+  }
+
+  // Soltar el mouse para dejar de arrastrar
+  handleMouseUp() {
+    this.volumeSliders.music.isDragging = false;
+    this.volumeSliders.effects.isDragging = false;
+    this.volumeSliders.contrast.isDragging = false;
+  }
+
+
 
   handleKeyDown(key) {
     if (key === "Escape") {

@@ -19,6 +19,17 @@ class GameOverState {
 
   enter() {
     console.log("Entrando a Game Over");
+    
+    // Reproducir sonido de game over
+    if (window.playSoundEffect) {
+      window.playSoundEffect('gameOverSound');
+    }
+    
+    // Pausar música del juego
+    const gameMusic = document.getElementById('gameMusic');
+    if (gameMusic) {
+      gameMusic.pause();
+    }
   }
 
   update(dt) {

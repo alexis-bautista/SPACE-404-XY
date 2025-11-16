@@ -10,6 +10,12 @@ class Level3State extends BaseLevel {
     this.enemyWidth = 120;
     this.enemyHeight = 60;
 
+    // Sistema de asteroides
+    this.asteroids = [];
+    this.asteroidSpawnTimer = 0;
+    this.asteroidSpawnInterval = 3; // Cada 3 segundos aparece un asteroide
+    this.maxAsteroids = 5; // Máximo de asteroides en pantalla
+
     // Capas parallax específicas del Nivel 3
     this.layers = [
       {
@@ -46,40 +52,35 @@ class Level3State extends BaseLevel {
     ];
   }
 
-  // Configuración de dificultad del Nivel 3 (menos enemigos pero más resistentes)
+  // Configuración de dificultad del Nivel 3
   configureDifficulty(difficulty) {
-    switch (difficulty) {
-      case "facil":
-        this.maxEnemies = 8;
-        this.enemySpawnInterval = 3;
-        this.enemyShootCooldown = 1.8;
-        this.enemyHealth = 5;
-        this.enemyDamage = 10;
-        break;
-      case "medio":
-        this.maxEnemies = 12;
-        this.enemySpawnInterval = 2.5;
-        this.enemyShootCooldown = 1.5;
-        this.enemyHealth = 8;
-        this.enemyDamage = 15;
-        break;
-      case "dificil":
-        this.maxEnemies = 15;
-        this.enemySpawnInterval = 2;
-        this.enemyShootCooldown = 1.2;
-        this.enemyHealth = 12;
-        this.enemyDamage = 20;
-        break;
-      default:
-        this.maxEnemies = 12;
-        this.enemySpawnInterval = 2.5;
-        this.enemyShootCooldown = 1.5;
-        this.enemyHealth = 8;
-        this.enemyDamage = 15;
-    }
-    console.log(
-      `Nivel 3 - Dificultad: ${difficulty} - ${this.maxEnemies} enemigos con ${this.enemyHealth} HP (muy resistentes)`
-    );
+    const configs = {
+      facil: { maxEnemies: 8, spawnInterval: 3, shootCooldown: 1.8, health: 5, damage: 10 },
+      medio: { maxEnemies: 12, spawnInterval: 2.5, shootCooldown: 1.5, health: 8, damage: 15 },
+      dificil: { maxEnemies: 15, spawnInterval: 2, shootCooldown: 1.2, health: 12, damage: 20 }
+    };
+    
+    const config = configs[difficulty] || configs.medio;
+    this.maxEnemies = config.maxEnemies;
+    this.enemySpawnInterval = config.spawnInterval;
+    this.enemyShootCooldown = config.shootCooldown;
+    this.enemyHealth = config.health;
+    this.enemyDamage = config.damage;
+    
+    console.log(`Nivel 3 - ${difficulty} - ${this.maxEnemies} enemigos con ${this.enemyHealth} HP`);
+  }
+
+  enemyShoot(enemy) {
+    this.enemyBullets.push({
+      x: enemy.x,
+      y: enemy.y + enemy.height / 2 - this.enemyBulletHeight / 2,
+      width: this.enemyBulletWidth,
+      height: this.enemyBulletHeight,
+      speed: -this.enemyBulletSpeed,
+      scale: 3,
+      image: loader.getImage("bala_enemiga"),
+      isPoison: Math.random() < 0.2 // 20% veneno
+    });
   }
 
   // Carga de assets específicos del Nivel 3
@@ -115,11 +116,13 @@ class Level3State extends BaseLevel {
     }
   }
 
-  // Spawn de enemigos con movimiento más complejo (Nivel 3)
+  // Spawn de enemigos con escudos (30% de probabilidad)
   spawnEnemy() {
     const minY = 50;
     const maxY = this.canvas.height - this.enemyHeight - 50;
     const randomY = minY + Math.random() * (maxY - minY);
+    
+    const hasShield = Math.random() < 0.3; // 30% tienen escudo
 
     const enemy = {
       x: this.canvas.width,
@@ -140,6 +143,9 @@ class Level3State extends BaseLevel {
       canShoot: true,
       health: this.enemyHealth,
       maxHealth: this.enemyHealth,
+      hasShield: hasShield,
+      shieldHealth: hasShield ? 3 : 0, // El escudo absorbe 3 disparos
+      maxShieldHealth: 3,
       isDestroyed: false,
       isFalling: false,
       fallSpeed: 0,
@@ -149,10 +155,74 @@ class Level3State extends BaseLevel {
     this.enemies.push(enemy);
     this.enemiesSpawned++;
     console.log(
-      `Enemigo spawneado ${this.enemiesSpawned}/${
-        this.maxEnemies
-      } en Y=${Math.round(randomY)} - HP: ${this.enemyHealth}`
+      `Enemigo spawneado ${this.enemiesSpawned}/${this.maxEnemies} en Y=${Math.round(randomY)} - HP: ${this.enemyHealth}${hasShield ? ' [ESCUDO]' : ''}`
     );
+  }
+
+  // Spawn de asteroides desde la derecha
+  spawnAsteroid() {
+    if (this.asteroids.length >= this.maxAsteroids) return;
+
+    const randomY = Math.random() * (this.canvas.height - 80);
+    const size = 40 + Math.random() * 40; // Tamaño entre 40-80px
+    const speed = 100 + Math.random() * 150; // Velocidad horizontal variable
+
+    const asteroid = {
+      x: this.canvas.width + size, // Aparece a la derecha de la pantalla
+      y: randomY,
+      width: size,
+      height: size,
+      speed: speed,
+      rotation: Math.random() * Math.PI * 2,
+      rotationSpeed: (Math.random() - 0.5) * 3,
+      damage: 8, // Daño al jugador
+    };
+
+    this.asteroids.push(asteroid);
+    console.log(`Asteroide spawneado en Y=${Math.round(randomY)}`);
+  }
+
+  // Actualizar asteroides
+  updateAsteroids(dt) {
+    // Spawn de nuevos asteroides
+    this.asteroidSpawnTimer += dt;
+    if (this.asteroidSpawnTimer >= this.asteroidSpawnInterval) {
+      this.spawnAsteroid();
+      this.asteroidSpawnTimer = 0;
+    }
+
+    // Mover asteroides de derecha a izquierda
+    for (let i = this.asteroids.length - 1; i >= 0; i--) {
+      const asteroid = this.asteroids[i];
+      
+      asteroid.x -= asteroid.speed * dt;
+      asteroid.rotation += asteroid.rotationSpeed * dt;
+
+      // Verificar colisión con el jugador
+      if (!this.naveTerrestre.isFalling && this.checkAABBCollision(asteroid, this.naveTerrestre)) {
+        this.naveTerrestre.health -= asteroid.damage;
+        this.playerHealth = this.naveTerrestre.health;
+        this.asteroids.splice(i, 1);
+        
+        if (window.playSoundEffect) {
+          window.playSoundEffect('impactSound');
+        }
+
+        console.log(`¡Impacto de asteroide! -${asteroid.damage} HP | Salud: ${this.naveTerrestre.health}`);
+
+        if (this.naveTerrestre.health <= 0) {
+          this.naveTerrestre.isFalling = true;
+          this.naveTerrestre.fallSpeed = 0;
+          this.playerHealth = 0;
+        }
+        continue;
+      }
+
+      // Eliminar asteroides fuera de pantalla (por la izquierda)
+      if (asteroid.x + asteroid.width < 0) {
+        this.asteroids.splice(i, 1);
+      }
+    }
   }
 
   // Actualización de enemigos con movimiento en todas las direcciones
@@ -223,62 +293,169 @@ class Level3State extends BaseLevel {
     }
   }
 
-  // Renderizado de capas parallax específicas del Nivel 3
+  // Actualización general del nivel 3
+  update(dt) {
+    super.update(dt); // Llamar al update de BaseLevel
+    this.updateAsteroids(dt); // Agregar sistema de asteroides
+  }
+
   renderParallaxLayers(ctx) {
-    // Renderizar el fondo
-    const fondoLayer = this.layers[0];
-    if (fondoLayer.image) {
-      ctx.drawImage(
-        fondoLayer.image,
-        fondoLayer.x,
-        fondoLayer.y,
-        this.canvas.width,
-        this.canvas.height
-      );
+    if (this.layers[0].image) {
+      ctx.drawImage(this.layers[0].image, 0, 0, this.canvas.width, this.canvas.height);
     }
 
-    // Renderizar carro (parte inferior izquierda)
-    const carroLayer = this.layers[1];
-    if (carroLayer && carroLayer.image) {
-      const scale = carroLayer.scale || 0.4;
-      const width = carroLayer.image.width * scale;
-      const height = carroLayer.image.height * scale;
-      const yPos = this.canvas.height - height;
+    // Renderizar capas con escala
+    [1, 2, 3].forEach(i => {
+      const layer = this.layers[i];
+      if (!layer?.image) return;
+      
+      const scale = layer.scale || 1;
+      const width = layer.image.width * scale;
+      const height = layer.image.height * scale;
+      const y = i === 1 ? this.canvas.height - height : layer.y;
+      
+      ctx.drawImage(layer.image, layer.x, y, width, height);
+    });
+  }
 
-      ctx.drawImage(carroLayer.image, carroLayer.x, yPos, width, height);
+  renderPoisonBullet(ctx, bullet) {
+    ctx.save();
+    const pulse = Math.sin(Date.now() / 100) * 0.3 + 0.7;
+    const cx = bullet.x + bullet.width / 2;
+    const cy = bullet.y + bullet.height / 2;
+    
+    // Aura eléctrica
+    const aura = ctx.createRadialGradient(cx, cy, 0, cx, cy, bullet.width * pulse);
+    aura.addColorStop(0, '#a0f');
+    aura.addColorStop(0.4, '#80d');
+    aura.addColorStop(1, 'rgba(128, 0, 255, 0)');
+    ctx.fillStyle = aura;
+    ctx.fillRect(bullet.x - 10, bullet.y - 10, bullet.width + 20, bullet.height + 20);
+    
+    // Núcleo
+    const core = ctx.createLinearGradient(bullet.x, bullet.y, bullet.x + bullet.width, bullet.y + bullet.height);
+    core.addColorStop(0, '#d0f');
+    core.addColorStop(0.5, '#a0d');
+    core.addColorStop(1, '#80c');
+    ctx.fillStyle = core;
+    ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+    
+    // Chispas
+    ctx.strokeStyle = '#f0f';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + (Math.random() - 0.5) * 20, cy + (Math.random() - 0.5) * 20);
+      ctx.stroke();
+    }
+    
+    // Borde
+    ctx.strokeStyle = '#fff';
+    ctx.strokeRect(bullet.x, bullet.y, bullet.width, bullet.height);
+    ctx.restore();
+  }
+
+  renderShield(ctx, enemy) {
+    const alpha = (enemy.shieldHealth / enemy.maxShieldHealth) * 0.6 + 0.2;
+    const pulse = Math.sin(Date.now() / 200) * 0.2 + 0.8;
+    const cx = enemy.x + enemy.width / 2;
+    const cy = enemy.y + enemy.height / 2;
+    
+    ctx.save();
+    ctx.globalAlpha = alpha * pulse;
+    
+    const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, enemy.width * 0.7);
+    gradient.addColorStop(0, 'rgba(0, 150, 255, 0.3)');
+    gradient.addColorStop(0.7, 'rgba(0, 200, 255, 0.6)');
+    gradient.addColorStop(1, 'rgba(0, 255, 255, 0.8)');
+    
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(cx, cy, enemy.width * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#0ff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  renderAsteroid(ctx, asteroid) {
+    ctx.save();
+    ctx.translate(asteroid.x + asteroid.width / 2, asteroid.y + asteroid.height / 2);
+    ctx.rotate(asteroid.rotation);
+    ctx.fillStyle = '#5a4a3a';
+    ctx.strokeStyle = '#3a2a1a';
+    ctx.lineWidth = 2;
+    
+    // Polígono irregular
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      const variance = 0.7 + Math.random() * 0.3;
+      const radius = (asteroid.width / 2) * variance;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    
+    // Detalles
+    ctx.fillStyle = '#4a3a2a';
+    ctx.beginPath();
+    ctx.arc(-asteroid.width * 0.15, -asteroid.height * 0.1, asteroid.width * 0.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(asteroid.width * 0.1, asteroid.height * 0.15, asteroid.width * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  renderMainElements(ctx) {
+    // Balas del jugador
+    this.bullets.forEach(b => {
+      b.image ? ctx.drawImage(b.image, b.x, b.y, b.width, b.height) : 
+                (ctx.fillStyle = "#ff0", ctx.fillRect(b.x, b.y, b.width, b.height));
+    });
+
+    // Balas enemigas
+    const balaImg = loader.getImage("bala_enemiga");
+    this.enemyBullets.forEach(b => {
+      if (b.isPoison) this.renderPoisonBullet(ctx, b);
+      else if (balaImg) ctx.drawImage(balaImg, b.x, b.y, b.width, b.height);
+      else (ctx.fillStyle = "#f00", ctx.fillRect(b.x, b.y, b.width, b.height));
+    });
+
+    // Nave del jugador
+    if (this.naveTerrestre.image && !this.naveTerrestre.isDestroyed) {
+      const hp = this.naveTerrestre.health / this.naveTerrestre.maxHealth;
+      if (hp < 0.3 && Math.floor(Date.now() / 200) % 2 === 0) ctx.globalAlpha = 0.5;
+      ctx.drawImage(this.naveTerrestre.image, this.naveTerrestre.x, this.naveTerrestre.y, 
+                    this.naveTerrestre.width, this.naveTerrestre.height);
+      ctx.globalAlpha = 1.0;
     }
 
-    // Renderizar nave_escenario (centro-derecha)
-    const naveEscenarioLayer = this.layers[2];
-    if (naveEscenarioLayer && naveEscenarioLayer.image) {
-      const scale = naveEscenarioLayer.scale || 0.8;
-      const width = naveEscenarioLayer.image.width * scale;
-      const height = naveEscenarioLayer.image.height * scale;
+    // Enemigos
+    this.enemies.forEach(e => {
+      if (!e.image) return (ctx.fillStyle = "#f00", ctx.fillRect(e.x, e.y, e.width, e.height));
+      
+      if (e.isFalling) {
+        ctx.save();
+        ctx.translate(e.x + e.width / 2, e.y + e.height / 2);
+        ctx.rotate(Math.PI / 4);
+        ctx.drawImage(e.image, -e.width / 2, -e.height / 2, e.width, e.height);
+        ctx.restore();
+      } else {
+        ctx.drawImage(e.image, e.x, e.y, e.width, e.height);
+        if (e.hasShield && e.shieldHealth > 0) this.renderShield(ctx, e);
+        this.renderHealthBar(ctx, e.x, e.y - 10, e.width, 5, e.health / e.maxHealth);
+      }
+    });
 
-      ctx.drawImage(
-        naveEscenarioLayer.image,
-        naveEscenarioLayer.x,
-        naveEscenarioLayer.y,
-        width,
-        height
-      );
-    }
-
-    // Renderizar ovnis (parte superior centro)
-    const ovnisLayer = this.layers[3];
-    if (ovnisLayer && ovnisLayer.image) {
-      const scale = ovnisLayer.scale || 0.8;
-      const width = ovnisLayer.image.width * scale;
-      const height = ovnisLayer.image.height * scale;
-
-      ctx.drawImage(
-        ovnisLayer.image,
-        ovnisLayer.x,
-        ovnisLayer.y,
-        width,
-        height
-      );
-    }
+    // Asteroides
+    this.asteroids.forEach(a => this.renderAsteroid(ctx, a));
   }
 }
 

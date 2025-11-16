@@ -43,40 +43,23 @@ class Level2State extends BaseLevel {
     };
   }
 
-  // Configuración de dificultad específica del Nivel 2 (más difícil)
   configureDifficulty(difficulty) {
-    switch (difficulty) {
-      case "facil":
-        this.maxEnemies = 15;
-        this.enemySpawnInterval = 2.5;
-        this.enemyShootCooldown = 1.8;
-        this.enemyHealth = 3;
-        this.enemyDamage = 8;
-        break;
-      case "medio":
-        this.maxEnemies = 25;
-        this.enemySpawnInterval = 2;
-        this.enemyShootCooldown = 1.3;
-        this.enemyHealth = 4;
-        this.enemyDamage = 12;
-        break;
-      case "dificil":
-        this.maxEnemies = 35;
-        this.enemySpawnInterval = 1.5;
-        this.enemyShootCooldown = 1;
-        this.enemyHealth = 6;
-        this.enemyDamage = 18;
-        break;
-      default:
-        this.maxEnemies = 25;
-        this.enemySpawnInterval = 2;
-        this.enemyShootCooldown = 1.3;
-        this.enemyHealth = 4;
-        this.enemyDamage = 12;
-    }
-    console.log(
-      `Nivel 2 - Dificultad: ${difficulty} - ${this.maxEnemies} enemigos con ${this.enemyHealth} HP`
-    );
+    const configs = {
+      facil: { maxEnemies: 15, spawnInterval: 2.5, shootCooldown: 1.8, health: 3, damage: 8 },
+      medio: { maxEnemies: 25, spawnInterval: 2, shootCooldown: 1.3, health: 4, damage: 12 },
+      dificil: { maxEnemies: 35, spawnInterval: 1.5, shootCooldown: 1, health: 6, damage: 18 }
+    };
+    
+    const config = configs[difficulty] || configs.medio;
+    Object.assign(this, {
+      maxEnemies: config.maxEnemies,
+      enemySpawnInterval: config.spawnInterval,
+      enemyShootCooldown: config.shootCooldown,
+      enemyHealth: config.health,
+      enemyDamage: config.damage
+    });
+    
+    console.log(`Nivel 2 - ${difficulty} - ${this.maxEnemies} enemigos con ${this.enemyHealth} HP`);
   }
 
   // Carga de assets específicos del Nivel 2
@@ -110,42 +93,23 @@ class Level2State extends BaseLevel {
     }
   }
 
-  // Renderizado de capas parallax específicas del Nivel 2
   renderParallaxLayers(ctx) {
-    // Renderizar el fondo espacial
-    const fondoLayer = this.layers[0];
-    if (fondoLayer.image) {
-      ctx.drawImage(
-        fondoLayer.image,
-        fondoLayer.x,
-        fondoLayer.y,
-        this.canvas.width,
-        this.canvas.height
-      );
+    // Fondo
+    if (this.layers[0].image) {
+      ctx.drawImage(this.layers[0].image, 0, 0, this.canvas.width, this.canvas.height);
     }
 
-    // Dibujar el Sol con efecto de brillo
+    // Sol con brillo
     if (this.sol) {
-      // Efecto de brillo (glow)
       ctx.save();
-      const gradient = ctx.createRadialGradient(
-        this.sol.x,
-        this.sol.y,
-        0,
-        this.sol.x,
-        this.sol.y,
-        this.sol.radius * 1.5
-      );
-      gradient.addColorStop(0, this.sol.color);
-      gradient.addColorStop(0.5, this.sol.glowColor);
-      gradient.addColorStop(1, "rgba(255, 215, 0, 0)");
-
-      ctx.fillStyle = gradient;
+      const glow = ctx.createRadialGradient(this.sol.x, this.sol.y, 0, this.sol.x, this.sol.y, this.sol.radius * 1.5);
+      glow.addColorStop(0, this.sol.color);
+      glow.addColorStop(0.5, this.sol.glowColor);
+      glow.addColorStop(1, "rgba(255, 215, 0, 0)");
+      ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(this.sol.x, this.sol.y, this.sol.radius * 1.5, 0, Math.PI * 2);
       ctx.fill();
-
-      // Sol sólido
       ctx.fillStyle = this.sol.color;
       ctx.beginPath();
       ctx.arc(this.sol.x, this.sol.y, this.sol.radius, 0, Math.PI * 2);
@@ -153,31 +117,183 @@ class Level2State extends BaseLevel {
       ctx.restore();
     }
 
-    // Renderizar Tierra
-    const tierraLayer = this.layers[1];
-    if (tierraLayer && tierraLayer.image) {
-      const scale = tierraLayer.scale || 0.6;
-      const width = tierraLayer.image.width * scale;
-      const height = tierraLayer.image.height * scale;
+    // Tierra y Luna
+    [1, 2].forEach(i => {
+      const layer = this.layers[i];
+      if (layer?.image) {
+        const scale = layer.scale || 1;
+        ctx.drawImage(layer.image, layer.x, layer.y, layer.image.width * scale, layer.image.height * scale);
+      }
+    });
+  }
+
+  enemyShoot(enemy) {
+    this.enemyBullets.push({
+      x: enemy.x,
+      y: enemy.y + enemy.height / 2 - this.enemyBulletHeight / 2,
+      width: this.enemyBulletWidth,
+      height: this.enemyBulletHeight,
+      speed: -this.enemyBulletSpeed,
+      scale: 3,
+      image: loader.getImage("bala_enemiga"),
+      isPoison: Math.random() < 0.3 // 30% veneno
+    });
+  }
+
+  // Sobrescribir renderizado de balas enemigas para mostrar balas venenosas en morado
+  renderMainElements(ctx) {
+    // Renderizar balas del jugador
+    this.bullets.forEach((bullet) => {
+      if (bullet.image) {
+        ctx.drawImage(
+          bullet.image,
+          bullet.x,
+          bullet.y,
+          bullet.width,
+          bullet.height
+        );
+      } else {
+        ctx.fillStyle = "#ff0";
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+      }
+    });
+
+    // Renderizar balas enemigas (con soporte para balas venenosas)
+    const balaEnemigaImg = loader.getImage("bala_enemiga");
+
+    this.enemyBullets.forEach((bullet) => {
+      if (bullet.isPoison) {
+        // Bala venenosa - morado/púrpura con efecto eléctrico
+        ctx.save();
+        
+        // Efecto de energía eléctrica pulsante
+        const pulse = Math.sin(Date.now() / 100) * 0.3 + 0.7;
+        const gradient = ctx.createRadialGradient(
+          bullet.x + bullet.width / 2,
+          bullet.y + bullet.height / 2,
+          0,
+          bullet.x + bullet.width / 2,
+          bullet.y + bullet.height / 2,
+          bullet.width * pulse
+        );
+        gradient.addColorStop(0, '#a0f');
+        gradient.addColorStop(0.4, '#80d');
+        gradient.addColorStop(1, 'rgba(128, 0, 255, 0)');
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(
+          bullet.x - 10,
+          bullet.y - 10,
+          bullet.width + 20,
+          bullet.height + 20
+        );
+        
+        // Bala venenosa sólida (morado)
+        const coreGradient = ctx.createLinearGradient(
+          bullet.x, bullet.y,
+          bullet.x + bullet.width, bullet.y + bullet.height
+        );
+        coreGradient.addColorStop(0, '#d0f');
+        coreGradient.addColorStop(0.5, '#a0d');
+        coreGradient.addColorStop(1, '#80c');
+        ctx.fillStyle = coreGradient;
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+        
+        // Chispas eléctricas (líneas aleatorias)
+        ctx.strokeStyle = '#f0f';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 3; i++) {
+          const offsetX = (Math.random() - 0.5) * 20;
+          const offsetY = (Math.random() - 0.5) * 20;
+          ctx.beginPath();
+          ctx.moveTo(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2);
+          ctx.lineTo(
+            bullet.x + bullet.width / 2 + offsetX,
+            bullet.y + bullet.height / 2 + offsetY
+          );
+          ctx.stroke();
+        }
+        
+        // Borde brillante
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(bullet.x, bullet.y, bullet.width, bullet.height);
+        
+        ctx.restore();
+      } else if (balaEnemigaImg) {
+        // Bala normal
+        ctx.drawImage(
+          balaEnemigaImg,
+          bullet.x,
+          bullet.y,
+          bullet.width,
+          bullet.height
+        );
+      } else {
+        // Fallback bala normal
+        ctx.fillStyle = "#f00";
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+      }
+    });
+
+    // Renderizar nave del jugador
+    if (this.naveTerrestre.image && !this.naveTerrestre.isDestroyed) {
+      const healthPercent =
+        this.naveTerrestre.health / this.naveTerrestre.maxHealth;
+      if (healthPercent < 0.3 && Math.floor(Date.now() / 200) % 2 === 0) {
+        ctx.globalAlpha = 0.5;
+      }
 
       ctx.drawImage(
-        tierraLayer.image,
-        tierraLayer.x,
-        tierraLayer.y,
-        width,
-        height
+        this.naveTerrestre.image,
+        this.naveTerrestre.x,
+        this.naveTerrestre.y,
+        this.naveTerrestre.width,
+        this.naveTerrestre.height
       );
+
+      ctx.globalAlpha = 1.0;
     }
 
-    // Renderizar Luna
-    const lunaLayer = this.layers[2];
-    if (lunaLayer && lunaLayer.image) {
-      const scale = lunaLayer.scale || 0.4;
-      const width = lunaLayer.image.width * scale;
-      const height = lunaLayer.image.height * scale;
+    // Renderizar enemigos
+    this.enemies.forEach((enemy) => {
+      if (enemy.image) {
+        if (enemy.isFalling) {
+          ctx.save();
+          ctx.translate(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+          ctx.rotate(Math.PI / 4);
+          ctx.drawImage(
+            enemy.image,
+            -enemy.width / 2,
+            -enemy.height / 2,
+            enemy.width,
+            enemy.height
+          );
+          ctx.restore();
+        } else {
+          ctx.drawImage(
+            enemy.image,
+            enemy.x,
+            enemy.y,
+            enemy.width,
+            enemy.height
+          );
 
-      ctx.drawImage(lunaLayer.image, lunaLayer.x, lunaLayer.y, width, height);
-    }
+          const healthPercent = enemy.health / enemy.maxHealth;
+          this.renderHealthBar(
+            ctx,
+            enemy.x,
+            enemy.y - 10,
+            enemy.width,
+            5,
+            healthPercent
+          );
+        }
+      } else {
+        ctx.fillStyle = "#f00";
+        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+      }
+    });
   }
 }
 

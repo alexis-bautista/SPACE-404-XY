@@ -21,6 +21,17 @@ class LevelCompleteState {
 
   enter() {
     console.log("Entrando a Level Complete");
+    
+    // Reproducir sonido de victoria
+    if (window.playSoundEffect) {
+      window.playSoundEffect('winSound');
+    }
+    
+    // Pausar música del juego
+    const gameMusic = document.getElementById('gameMusic');
+    if (gameMusic) {
+      gameMusic.pause();
+    }
   }
 
   update(dt) {

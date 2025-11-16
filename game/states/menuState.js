@@ -5,6 +5,8 @@ class MenuState {
   constructor(canvas, stateManager) {
     this.canvas = canvas;
     this.stateManager = stateManager;
+    this.musicStarted = false;
+    this.audioReady = false;
     // Definir áreas de botones
     this.buttons = {
       play: { x: 0, y: 0, width: 0, height: 0 },
@@ -15,6 +17,15 @@ class MenuState {
 
   enter() {
     console.log("Entrando al menú principal");
+    this.musicStarted = false;
+    this.menuMusic = document.getElementById('menuMusic');
+    
+    if (this.menuMusic) {
+      console.log('Elemento de audio encontrado');
+      this.menuMusic.volume = 0.5;
+    } else {
+      console.error('No se encontró el elemento de audio menuMusic');
+    }
   }
 
   update(dt) {
@@ -74,6 +85,7 @@ class MenuState {
       const newWidth = soundBtn.width * 2.5;
       const newHeight = soundBtn.height * 2.5;
       ctx.drawImage(soundBtn, soundX, soundY, newWidth, newHeight);
+      
       // Guardar posición para detección de clics
       this.buttons.sound = {
         x: soundX,
@@ -81,11 +93,50 @@ class MenuState {
         width: newWidth,
         height: newHeight,
       };
+      
+      // Si está silenciado, dibujar una X roja sobre el botón
+      if (this.menuMusic && this.menuMusic.muted) {
+        ctx.strokeStyle = "#ff0000";
+        ctx.lineWidth = 4;
+        ctx.lineCap = "round";
+        
+        // Dibujar X
+        const padding = 10;
+        ctx.beginPath();
+        ctx.moveTo(soundX + padding, soundY + padding);
+        ctx.lineTo(soundX + newWidth - padding, soundY + newHeight - padding);
+        ctx.moveTo(soundX + newWidth - padding, soundY + padding);
+        ctx.lineTo(soundX + padding, soundY + newHeight - padding);
+        ctx.stroke();
+        
+        // Dibujar círculo rojo alrededor
+        ctx.strokeStyle = "#ff0000";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(soundX + newWidth/2, soundY + newHeight/2, newWidth/2 + 5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
   }
 
   // Manejar clics en los botones
   handleClick(x, y) {
+    // Iniciar música en el primer clic (requerido por los navegadores)
+    if (!this.musicStarted && this.menuMusic) {
+      console.log('=== REPRODUCIENDO MÚSICA ===');
+      this.menuMusic.play()
+        .then(() => {
+          console.log('✓ Música reproduciendo correctamente');
+          console.log('Volume:', this.menuMusic.volume);
+          console.log('Paused:', this.menuMusic.paused);
+          console.log('Duration:', this.menuMusic.duration);
+        })
+        .catch(err => {
+          console.error('✗ Error al reproducir:', err);
+        });
+      this.musicStarted = true;
+    }
+    
     // Verificar si se hizo clic en Play
     if (
       x >= this.buttons.play.x &&
@@ -118,6 +169,10 @@ class MenuState {
       y <= this.buttons.sound.y + this.buttons.sound.height
     ) {
       console.log("Botón Sound presionado");
+      if (this.menuMusic) {
+        this.menuMusic.muted = !this.menuMusic.muted;
+        console.log('Muted:', this.menuMusic.muted);
+      }
       return "sound";
     }
 
@@ -126,6 +181,8 @@ class MenuState {
 
   exit() {
     console.log("Saliendo del menú principal");
+    // La música continúa en otros estados del menú (levelSelect, settings)
+    // Solo se pausa cuando se entra a un nivel
   }
 }
 

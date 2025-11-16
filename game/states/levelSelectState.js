@@ -19,6 +19,12 @@ class LevelSelectState {
 
   enter() {
     console.log("Entrando a selección de niveles");
+    this.menuMusic = document.getElementById('menuMusic');
+    
+    // Continuar reproduciendo la música si no está sonando
+    if (this.menuMusic && this.menuMusic.paused) {
+      this.menuMusic.play().catch(err => console.log('Error reproduciendo música:', err));
+    }
   }
 
   update(dt) {
@@ -111,6 +117,7 @@ class LevelSelectState {
       const newWidth = soundBtn.width * 2.5;
       const newHeight = soundBtn.height * 2.5;
       ctx.drawImage(soundBtn, soundX, soundY, newWidth, newHeight);
+      
       // Guardar posición para detección de clics
       this.buttons.sound = {
         x: soundX,
@@ -118,6 +125,29 @@ class LevelSelectState {
         width: newWidth,
         height: newHeight,
       };
+      
+      // Si está silenciado, dibujar una X roja sobre el botón
+      if (this.menuMusic && this.menuMusic.muted) {
+        ctx.strokeStyle = "#ff0000";
+        ctx.lineWidth = 4;
+        ctx.lineCap = "round";
+        
+        // Dibujar X
+        const padding = 10;
+        ctx.beginPath();
+        ctx.moveTo(soundX + padding, soundY + padding);
+        ctx.lineTo(soundX + newWidth - padding, soundY + newHeight - padding);
+        ctx.moveTo(soundX + newWidth - padding, soundY + padding);
+        ctx.lineTo(soundX + padding, soundY + newHeight - padding);
+        ctx.stroke();
+        
+        // Dibujar círculo rojo alrededor
+        ctx.strokeStyle = "#ff0000";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(soundX + newWidth/2, soundY + newHeight/2, newWidth/2 + 5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
   }
 
@@ -147,6 +177,10 @@ class LevelSelectState {
       y <= this.buttons.sound.y + this.buttons.sound.height
     ) {
       console.log("Botón Sound presionado");
+      if (this.menuMusic) {
+        this.menuMusic.muted = !this.menuMusic.muted;
+        console.log('Muted:', this.menuMusic.muted);
+      }
       return "sound";
     }
 

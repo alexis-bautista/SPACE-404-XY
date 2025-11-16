@@ -9,6 +9,10 @@
       html,
       body {
         margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
         background: #0f0f10;
         color: #eee;
         font-family: system-ui;
@@ -18,7 +22,40 @@
 
   <body>
     <div id="gamecontainer">
-      <canvas id="game" width="960" height="540"></canvas>
+      <canvas id="game"></canvas>
+      
+      <!-- Audio embebido directamente en el HTML -->
+      <audio id="menuMusic" loop preload="auto">
+        <source src="assets/audio/music/musica_menu.mp3" type="audio/mpeg">
+      </audio>
+      
+      <!-- Música del juego (niveles) -->
+      <audio id="gameMusic" loop preload="auto">
+        <source src="assets/audio/music/juego_theme.mp3" type="audio/mpeg">
+      </audio>
+      
+      <!-- Efecto de sonido de disparo láser -->
+      <audio id="laserSound" preload="auto">
+        <source src="assets/audio/laser_shoot.mp3" type="audio/mpeg">
+        <source src="assets/audio/laser_shoot.ogg" type="audio/ogg">
+        <source src="assets/audio/laser_shoot.wav" type="audio/wav">
+      </audio>
+      
+      <!-- Efecto de sonido de impacto en la nave -->
+      <audio id="impactSound" preload="auto">
+        <source src="assets/audio/music/impacto_nave.mp3" type="audio/mpeg">
+      </audio>
+      
+      <!-- Efecto de sonido de game over -->
+      <audio id="gameOverSound" preload="auto">
+        <source src="assets/audio/music/game_over.mp3" type="audio/mpeg">
+      </audio>
+      
+      <!-- Efecto de sonido de victoria -->
+      <audio id="winSound" preload="auto">
+        <source src="assets/audio/music/win.mp3" type="audio/mpeg">
+      </audio>
+      
       <!-- Cargar Box2D antes de los módulos del juego -->
       <script src="./game/states/Box2dWeb-2.1.a.3.min.js"></script>
       <script type="module" src="./main.js"></script>

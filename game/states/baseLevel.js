@@ -99,11 +99,34 @@ class BaseLevel {
     this.enemyBulletHeight = 30;
     this.enemyShootCooldown = 1.5;
 
+    // Sistema de veneno (Nivel 2)
+    this.poisonState = {
+      isPoisoned: false,
+      duration: 0,
+      maxDuration: 5, // 5 segundos
+      damagePerSecond: 1, // 1 de daño por segundo
+      damageTimer: 0,
+      damageInterval: 0.5, // Cada 0.5 segundos hace daño
+    };
+
     // Control de teclas
     this.keys = {
       ArrowUp: false,
       ArrowDown: false,
       ArrowRight: false,
+    };
+
+    // Controles táctiles
+    // Cargar posiciones guardadas desde localStorage
+    const savedPositions = this.loadHudPositions();
+    this.touchControls = {
+      enabled: true, // Siempre habilitado, se mostrará según el tamaño de pantalla
+      buttons: {
+        up: { x: savedPositions.up.x, y: savedPositions.up.y, radius: 40, pressed: false },
+        down: { x: savedPositions.down.x, y: savedPositions.down.y, radius: 40, pressed: false },
+        shoot: { x: savedPositions.shoot.x, y: savedPositions.shoot.y, radius: 50, pressed: false },
+      },
+      activeTouches: new Map(), // Mapeo de touch ID a botón
     };
 
     // Box2D - Sistema de física
@@ -114,6 +137,24 @@ class BaseLevel {
 
     // Inicializar Box2D
     this.initBox2D();
+  }
+
+  // Cargar posiciones guardadas de los botones HUD
+  loadHudPositions() {
+    try {
+      const saved = localStorage.getItem('hudButtonPositions');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error('Error cargando posiciones HUD:', e);
+    }
+    // Valores por defecto si no hay guardado
+    return {
+      up: { x: 50, y: 350 },
+      down: { x: 50, y: 450 },
+      shoot: { x: 860, y: 400 }
+    };
   }
 
   // ========== SISTEMA DE FÍSICA BOX2D ==========
@@ -228,23 +269,36 @@ class BaseLevel {
     bullet.shouldRemove = true;
 
     if (enemy.entity && !enemy.entity.isFalling) {
-      enemy.entity.health--;
-      console.log(
-        `¡Impacto! Enemigo salud: ${enemy.entity.health}/${enemy.entity.maxHealth}`
-      );
-
-      if (enemy.entity.health <= 0) {
-        enemy.entity.isFalling = true;
-        enemy.entity.fallSpeed = 0;
-        this.enemiesDestroyed++;
-
-        if (enemy.body) {
-          enemy.body.SetType(this.b2Body.b2_dynamicBody);
-        }
-
+      // Verificar si el enemigo tiene escudo activo
+      if (enemy.entity.hasShield && enemy.entity.shieldHealth > 0) {
+        enemy.entity.shieldHealth--;
         console.log(
-          `¡Enemigo destruido! ${this.enemiesDestroyed}/${this.maxEnemies}`
+          `¡Escudo impactado! Resistencia del escudo: ${enemy.entity.shieldHealth}/${enemy.entity.maxShieldHealth}`
         );
+        
+        if (enemy.entity.shieldHealth <= 0) {
+          console.log('¡Escudo destruido! Enemigo vulnerable.');
+        }
+      } else {
+        // Si no tiene escudo, dañar la nave
+        enemy.entity.health--;
+        console.log(
+          `¡Impacto! Enemigo salud: ${enemy.entity.health}/${enemy.entity.maxHealth}`
+        );
+
+        if (enemy.entity.health <= 0) {
+          enemy.entity.isFalling = true;
+          enemy.entity.fallSpeed = 0;
+          this.enemiesDestroyed++;
+
+          if (enemy.body) {
+            enemy.body.SetType(this.b2Body.b2_dynamicBody);
+          }
+
+          console.log(
+            `¡Enemigo destruido! ${this.enemiesDestroyed}/${this.maxEnemies}`
+          );
+        }
       }
     }
   }
@@ -255,6 +309,20 @@ class BaseLevel {
     if (this.naveTerrestre && !this.naveTerrestre.isFalling) {
       this.naveTerrestre.health -= this.enemyDamage;
       this.playerHealth = this.naveTerrestre.health;
+      
+      // Si es una bala venenosa, activar efecto de veneno
+      if (bullet.isPoison) {
+        this.poisonState.isPoisoned = true;
+        this.poisonState.duration = this.poisonState.maxDuration;
+        this.poisonState.damageTimer = 0;
+        console.log('⚠️ ALERTA: Sistemas electrónicos dañados - Virus detectado en la nave');
+        console.log('⚡ Energía de pulso EMP corrompiendo circuitos...');
+      }
+      
+      // Reproducir sonido de impacto
+      if (window.playSoundEffect) {
+        window.playSoundEffect('impactSound');
+      }
 
       console.log(
         `¡Nave terrestre impactada! Salud: ${this.naveTerrestre.health}/${this.naveTerrestre.maxHealth}`
@@ -371,6 +439,20 @@ class BaseLevel {
       this.configureDifficulty("medio");
     }
 
+    // Cambiar música: detener música del menú y reproducir música del juego
+    const menuMusic = document.getElementById('menuMusic');
+    const gameMusic = document.getElementById('gameMusic');
+    
+    if (menuMusic) {
+      menuMusic.pause();
+      menuMusic.currentTime = 0;
+    }
+    
+    if (gameMusic && !gameMusic.muted) {
+      gameMusic.currentTime = 0;
+      gameMusic.play().catch(err => console.log('Error reproduciendo música del juego:', err));
+    }
+
     this.loadLevelAssets();
   }
 
@@ -381,6 +463,19 @@ class BaseLevel {
 
   exit() {
     console.log(`Saliendo del Nivel ${this.levelNumber}`);
+    
+    // Detener música del juego y volver a la música del menú
+    const menuMusic = document.getElementById('menuMusic');
+    const gameMusic = document.getElementById('gameMusic');
+    
+    if (gameMusic) {
+      gameMusic.pause();
+      gameMusic.currentTime = 0;
+    }
+    
+    if (menuMusic && !menuMusic.muted && menuMusic.paused) {
+      menuMusic.play().catch(err => console.log('Error reproduciendo música del menú:', err));
+    }
   }
 
   // ========== ACTUALIZACIÓN DEL JUEGO ==========
@@ -406,7 +501,8 @@ class BaseLevel {
       }
     }
 
-    if (this.keys.ArrowRight && this.canShoot) {
+    const shouldShoot = this.keys.ArrowRight || this.touchControls.buttons.shoot.pressed;
+    if (shouldShoot && this.canShoot) {
       this.shoot();
     }
 
@@ -417,6 +513,42 @@ class BaseLevel {
     this.updateEnemyBullets(dt);
     this.checkCollisions();
     this.updateProgress();
+    this.updateTouchControls();
+    this.updatePoisonEffect(dt);
+  }
+
+  updatePoisonEffect(dt) {
+    if (!this.poisonState.isPoisoned) return;
+
+    // Reducir duración del veneno
+    this.poisonState.duration -= dt;
+
+    // Aplicar daño periódico
+    this.poisonState.damageTimer += dt;
+    if (this.poisonState.damageTimer >= this.poisonState.damageInterval) {
+      this.poisonState.damageTimer = 0;
+      
+      if (this.naveTerrestre && !this.naveTerrestre.isFalling) {
+        const damage = this.poisonState.damagePerSecond * this.poisonState.damageInterval;
+        this.naveTerrestre.health -= damage;
+        this.playerHealth = this.naveTerrestre.health;
+        
+        console.log(`⚡ Cortocircuito: -${damage.toFixed(1)} HP | Integridad: ${this.naveTerrestre.health.toFixed(0)}% (${this.poisonState.duration.toFixed(1)}s restantes)`);
+
+        if (this.naveTerrestre.health <= 0) {
+          this.naveTerrestre.isFalling = true;
+          this.naveTerrestre.fallSpeed = 0;
+          this.playerHealth = 0;
+          console.log("¡Nave terrestre destruida por veneno!");
+        }
+      }
+    }
+
+    // Terminar efecto de veneno
+    if (this.poisonState.duration <= 0) {
+      this.poisonState.isPoisoned = false;
+      console.log('✅ Sistemas restaurados - Daño electrónico reparado');
+    }
   }
 
   updateNaveTerrestre(dt) {
@@ -439,10 +571,14 @@ class BaseLevel {
 
     this.naveTerrestre.velocityY = 0;
 
-    if (this.keys.ArrowUp) {
+    // Controles de teclado o táctiles
+    const moveUp = this.keys.ArrowUp || this.touchControls.buttons.up.pressed;
+    const moveDown = this.keys.ArrowDown || this.touchControls.buttons.down.pressed;
+
+    if (moveUp) {
       this.naveTerrestre.velocityY = -this.naveTerrestre.speed;
     }
-    if (this.keys.ArrowDown) {
+    if (moveDown) {
       this.naveTerrestre.velocityY = this.naveTerrestre.speed;
     }
 
@@ -477,6 +613,11 @@ class BaseLevel {
 
     this.canShoot = false;
     this.shootTimer = this.shootCooldown;
+    
+    // Reproducir sonido de disparo
+    if (window.playSoundEffect) {
+      window.playSoundEffect('laserSound');
+    }
 
     console.log("¡Disparo! Balas activas:", this.bullets.length);
   }
@@ -633,18 +774,31 @@ class BaseLevel {
         if (this.checkAABBCollision(bullet, enemy)) {
           this.bullets.splice(i, 1);
 
-          enemy.health--;
-          console.log(
-            `¡Impacto! Enemigo recibió daño. Salud restante: ${enemy.health}/${enemy.maxHealth}`
-          );
-
-          if (enemy.health <= 0) {
-            enemy.isFalling = true;
-            enemy.fallSpeed = 0;
-            this.enemiesDestroyed++;
+          // Verificar si el enemigo tiene escudo activo
+          if (enemy.hasShield && enemy.shieldHealth > 0) {
+            enemy.shieldHealth--;
             console.log(
-              `¡Enemigo destruido! Total destruidos: ${this.enemiesDestroyed}/${this.maxEnemies}`
+              `¡Escudo impactado! Resistencia del escudo: ${enemy.shieldHealth}/${enemy.maxShieldHealth}`
             );
+            
+            if (enemy.shieldHealth <= 0) {
+              console.log('¡Escudo destruido! Enemigo vulnerable.');
+            }
+          } else {
+            // Si no tiene escudo, dañar la nave
+            enemy.health--;
+            console.log(
+              `¡Impacto! Enemigo recibió daño. Salud restante: ${enemy.health}/${enemy.maxHealth}`
+            );
+
+            if (enemy.health <= 0) {
+              enemy.isFalling = true;
+              enemy.fallSpeed = 0;
+              this.enemiesDestroyed++;
+              console.log(
+                `¡Enemigo destruido! Total destruidos: ${this.enemiesDestroyed}/${this.maxEnemies}`
+              );
+            }
           }
 
           break;
@@ -662,6 +816,20 @@ class BaseLevel {
 
         this.naveTerrestre.health -= this.enemyDamage;
         this.playerHealth = this.naveTerrestre.health;
+        
+        // Si es una bala venenosa, activar efecto de veneno
+        if (bullet.isPoison) {
+          this.poisonState.isPoisoned = true;
+          this.poisonState.duration = this.poisonState.maxDuration;
+          this.poisonState.damageTimer = 0;
+          console.log('⚠️ ALERTA: Sistemas electrónicos dañados - Virus detectado en la nave');
+          console.log('⚡ Energía de pulso EMP corrompiendo circuitos...');
+        }
+        
+        // Reproducir sonido de impacto
+        if (window.playSoundEffect) {
+          window.playSoundEffect('impactSound');
+        }
 
         console.log(
           `¡Nave terrestre impactada! Salud restante: ${this.naveTerrestre.health}/${this.naveTerrestre.maxHealth}`
@@ -911,6 +1079,49 @@ class BaseLevel {
       this.bars.health.borderColor,
       "Vida"
     );
+
+    // Indicador de daño electrónico (veneno)
+    if (this.poisonState.isPoisoned) {
+      const poisonX = this.bars.health.x;
+      const poisonY = this.bars.health.y + 30;
+      
+      // Texto "SISTEMAS DAÑADOS" parpadeante
+      const alpha = Math.sin(Date.now() / 200) * 0.3 + 0.7;
+      ctx.fillStyle = `rgba(160, 0, 255, ${alpha})`;
+      ctx.font = "bold 14px system-ui";
+      ctx.textAlign = "left";
+      ctx.fillText("⚡ SISTEMAS DAÑADOS", poisonX, poisonY);
+      
+      // Barra de tiempo restante de daño
+      const poisonBarWidth = 200;
+      const poisonBarHeight = 8;
+      const poisonProgress = this.poisonState.duration / this.poisonState.maxDuration;
+      
+      // Fondo
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+      ctx.fillRect(poisonX, poisonY + 5, poisonBarWidth, poisonBarHeight);
+      
+      // Progreso (morado eléctrico)
+      const barGradient = ctx.createLinearGradient(
+        poisonX, poisonY + 5,
+        poisonX + poisonBarWidth, poisonY + 5
+      );
+      barGradient.addColorStop(0, '#d0f');
+      barGradient.addColorStop(0.5, '#a0d');
+      barGradient.addColorStop(1, '#80c');
+      ctx.fillStyle = barGradient;
+      ctx.fillRect(poisonX, poisonY + 5, poisonBarWidth * poisonProgress, poisonBarHeight);
+      
+      // Borde
+      ctx.strokeStyle = '#f0f';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(poisonX, poisonY + 5, poisonBarWidth, poisonBarHeight);
+    }
+
+    // Renderizar controles táctiles si están habilitados
+    if (this.touchControls.enabled) {
+      this.renderTouchControls(ctx);
+    }
   }
 
   drawProgressBar(
@@ -978,9 +1189,100 @@ class BaseLevel {
     ctx.strokeRect(x, y, width, height);
   }
 
+  // ========== CONTROLES TÁCTILES ==========
+
+  updateTouchControls() {
+    // Los estados de los botones se actualizan en handleTouchStart/Move/End
+  }
+
+  renderTouchControls(ctx) {
+    const buttons = this.touchControls.buttons;
+
+    // Botón Arriba
+    this.drawTouchButton(ctx, buttons.up.x, buttons.up.y, buttons.up.radius, buttons.up.pressed, '▲');
+
+    // Botón Abajo
+    this.drawTouchButton(ctx, buttons.down.x, buttons.down.y, buttons.down.radius, buttons.down.pressed, '▼');
+
+    // Botón Disparar
+    this.drawTouchButton(ctx, buttons.shoot.x, buttons.shoot.y, buttons.shoot.radius, buttons.shoot.pressed, '🎯', true);
+  }
+
+  drawTouchButton(ctx, x, y, radius, pressed, icon, isShoot = false) {
+    // Sombra
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 10;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 4;
+
+    // Círculo exterior
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = pressed ? 'rgba(100, 150, 255, 0.6)' : 'rgba(50, 50, 50, 0.5)';
+    ctx.fill();
+
+    // Resetear sombra
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+
+    // Borde
+    ctx.strokeStyle = pressed ? '#6cf' : '#fff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Círculo interior
+    ctx.beginPath();
+    ctx.arc(x, y, radius - 10, 0, Math.PI * 2);
+    ctx.fillStyle = pressed ? 'rgba(120, 180, 255, 0.8)' : 'rgba(80, 80, 80, 0.7)';
+    ctx.fill();
+
+    // Icono/Texto
+    ctx.fillStyle = '#fff';
+    ctx.font = isShoot ? `${radius}px system-ui` : `bold ${radius * 0.8}px system-ui`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(icon, x, y);
+  }
+
+  handleTouchStart(x, y, touchId) {
+    // Verificar cada botón
+    for (let [buttonName, button] of Object.entries(this.touchControls.buttons)) {
+      const distance = Math.sqrt((x - button.x) ** 2 + (y - button.y) ** 2);
+      if (distance <= button.radius) {
+        button.pressed = true;
+        this.touchControls.activeTouches.set(touchId, buttonName);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  handleTouchMove(x, y, touchId) {
+    // Verificar si el toque se ha movido fuera del botón actual
+    const currentButton = this.touchControls.activeTouches.get(touchId);
+    if (currentButton) {
+      const button = this.touchControls.buttons[currentButton];
+      const distance = Math.sqrt((x - button.x) ** 2 + (y - button.y) ** 2);
+      if (distance > button.radius) {
+        button.pressed = false;
+        this.touchControls.activeTouches.delete(touchId);
+      }
+    }
+  }
+
+  handleTouchEnd(touchId) {
+    // Liberar el botón asociado a este toque
+    const buttonName = this.touchControls.activeTouches.get(touchId);
+    if (buttonName) {
+      this.touchControls.buttons[buttonName].pressed = false;
+      this.touchControls.activeTouches.delete(touchId);
+    }
+  }
+
   // ========== MANEJO DE EVENTOS ==========
 
   handleClick(x, y) {
+    // Verificar botón de menú primero
     if (
       x >= this.menuButton.x &&
       x <= this.menuButton.x + this.menuButton.width &&
@@ -994,6 +1296,25 @@ class BaseLevel {
         this.stateManager.setState("pause");
       }
       return "menu";
+    }
+
+    // Si los controles táctiles están habilitados, verificar clics en botones táctiles
+    if (this.touchControls.enabled) {
+      this.handleTouchStart(x, y, 'mouse');
+    }
+  }
+
+  handleMouseMove(x, y) {
+    // Si hay un "toque" de mouse activo, actualizar posición
+    if (this.touchControls.enabled && this.touchControls.activeTouches.has('mouse')) {
+      this.handleTouchMove(x, y, 'mouse');
+    }
+  }
+
+  handleMouseUp() {
+    // Liberar botones táctiles cuando se suelta el mouse
+    if (this.touchControls.enabled) {
+      this.handleTouchEnd('mouse');
     }
   }
 
@@ -1046,6 +1367,11 @@ class BaseLevel {
     this.enemiesSpawned = 0;
     this.enemiesDestroyed = 0;
     this.enemyBullets = [];
+
+    // Resetear estado de veneno
+    this.poisonState.isPoisoned = false;
+    this.poisonState.duration = 0;
+    this.poisonState.damageTimer = 0;
 
     this.keys.ArrowUp = false;
     this.keys.ArrowDown = false;
