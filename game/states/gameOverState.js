@@ -1,58 +1,70 @@
-// Estado de Game Over
+/**
+ * Estado que muestra la pantalla de Game Over cuando el jugador pierde
+ */
 import { loader } from "../../engine/loader.js";
 
 class GameOverState {
+  /**
+   * @param {HTMLCanvasElement} canvas - Lienzo del juego
+   * @param {Object} stateManager - Instancia del gestor de estados
+   */
   constructor(canvas, stateManager) {
     this.canvas = canvas;
     this.stateManager = stateManager;
 
-    // Estado del nivel de fondo (congelado)
     this.backgroundState = null;
     this.backgroundStateName = "";
 
-    // Posiciones de botones
     this.buttons = {
       reiniciar: { x: 0, y: 0, width: 0, height: 0 },
       menuPrincipal: { x: 0, y: 0, width: 0, height: 0 },
     };
   }
 
+  /**
+   * Ciclo de vida del estado: Entrar al estado
+   */
   enter() {
     console.log("Entrando a Game Over");
-    
-    // Reproducir sonido de game over
+
     if (window.playSoundEffect) {
-      window.playSoundEffect('gameOverSound');
+      window.playSoundEffect("gameOverSound");
     }
-    
-    // Pausar música del juego
-    const gameMusic = document.getElementById('gameMusic');
+
+    const gameMusic = document.getElementById("gameMusic");
     if (gameMusic) {
       gameMusic.pause();
     }
   }
 
-  update(dt) {
-    // No hay animaciones por ahora
-  }
+  /**
+   * Actualiza la lógica del estado
+   * @param {number} dt - Tiempo delta en segundos
+   */
+  update(dt) {}
 
-  // Configurar el estado de fondo (el nivel actual)
+  /**
+   * Configura el estado de fondo a renderizar
+   * @param {Object} state - Estado del nivel a mostrar congelado
+   * @param {string} stateName - Nombre del estado
+   */
   setBackgroundState(state, stateName) {
     this.backgroundState = state;
     this.backgroundStateName = stateName;
   }
 
+  /**
+   * Renderiza la pantalla de Game Over
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado del canvas
+   */
   render(ctx) {
-    // 1. Renderizar el estado de fondo (el nivel congelado)
     if (this.backgroundState) {
       this.backgroundState.render(ctx);
     }
 
-    // 2. Overlay
     ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // 3. Panel para el menú de game over
     const panelWidth = 600;
     const panelHeight = 400;
     const panelX = (this.canvas.width - panelWidth) / 2;
@@ -60,13 +72,11 @@ class GameOverState {
 
     this.drawRoundedRect(ctx, panelX, panelY, panelWidth, panelHeight, 20);
 
-    // 4. Título "GAME OVER"
     ctx.fillStyle = "#f00";
     ctx.font = "bold 48px system-ui";
     ctx.textAlign = "center";
     ctx.fillText("GAME OVER", this.canvas.width / 2, panelY + 80);
 
-    // 5. Mensaje adicional
     ctx.fillStyle = "#eee";
     ctx.font = "20px system-ui";
     ctx.fillText(
@@ -75,12 +85,10 @@ class GameOverState {
       panelY + 130
     );
 
-    // Posiciones centrales para los botones
     const centerX = this.canvas.width / 2;
     const startY = panelY + 180;
     const spacing = 80;
 
-    // 6. Botón Reiniciar
     const reiniciarBtn = loader.getImage("reiniciar");
     if (reiniciarBtn) {
       const btnX = centerX - reiniciarBtn.width / 2;
@@ -94,7 +102,6 @@ class GameOverState {
       };
     }
 
-    // 7. Botón Menú Principal
     const menuPrincipalBtn = loader.getImage("menu_principal");
     if (menuPrincipalBtn) {
       const btnX = centerX - menuPrincipalBtn.width / 2;
@@ -108,7 +115,6 @@ class GameOverState {
       };
     }
 
-    // 8. Indicación de tecla ESC
     ctx.fillStyle = "#aaa";
     ctx.font = "14px system-ui";
     ctx.textAlign = "center";
@@ -119,7 +125,15 @@ class GameOverState {
     );
   }
 
-  // Función auxiliar para dibujar rectángulos con bordes redondeados
+  /**
+   * Dibuja un rectángulo con bordes redondeados
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado
+   * @param {number} x - Posición X
+   * @param {number} y - Posición Y
+   * @param {number} width - Ancho
+   * @param {number} height - Alto
+   * @param {number} radius - Radio de las esquinas
+   */
   drawRoundedRect(ctx, x, y, width, height, radius) {
     ctx.fillStyle = "rgba(20, 20, 30, 0.95)";
     ctx.beginPath();
@@ -135,18 +149,25 @@ class GameOverState {
     ctx.closePath();
     ctx.fill();
 
-    // Borde
     ctx.strokeStyle = "#4bd";
     ctx.lineWidth = 3;
     ctx.stroke();
   }
 
+  /**
+   * Ciclo de vida del estado: Salir del estado
+   */
   exit() {
     console.log("Saliendo de Game Over");
   }
 
+  /**
+   * Maneja eventos de clic del mouse
+   * @param {number} x - Coordenada X del clic
+   * @param {number} y - Coordenada Y del clic
+   * @returns {string|null} Acción realizada o null
+   */
   handleClick(x, y) {
-    // Botón Reiniciar
     if (
       x >= this.buttons.reiniciar.x &&
       x <= this.buttons.reiniciar.x + this.buttons.reiniciar.width &&
@@ -164,7 +185,6 @@ class GameOverState {
       return "reiniciar";
     }
 
-    // Botón Menú Principal
     if (
       x >= this.buttons.menuPrincipal.x &&
       x <= this.buttons.menuPrincipal.x + this.buttons.menuPrincipal.width &&
@@ -173,7 +193,6 @@ class GameOverState {
     ) {
       console.log("Regresando al menú principal");
 
-      // Resetear el nivel antes de ir al menú principal
       if (
         this.backgroundState &&
         typeof this.backgroundState.restart === "function"
@@ -188,12 +207,14 @@ class GameOverState {
     return null;
   }
 
+  /**
+   * Maneja la presión de una tecla del teclado
+   * @param {string} key - Nombre de la tecla
+   */
   handleKeyDown(key) {
-    // Presionar ESC para volver a la selección de niveles
     if (key === "Escape") {
       console.log("Regresando a la selección de niveles");
 
-      // Resetear el nivel antes de salir
       if (
         this.backgroundState &&
         typeof this.backgroundState.restart === "function"

@@ -1,12 +1,19 @@
-// Estado del Nivel 2 con efecto Parallax - Escenario Espacial
 import { loader } from "../../engine/loader.js";
 import BaseLevel from "./baseLevel.js";
+import { RenderHelpers } from "../utils/renderHelpers.js";
 
+/**
+ * Estado del Nivel 2 con escenario espacial, sol, planetas y balas venenosas
+ * @extends BaseLevel
+ */
 class Level2State extends BaseLevel {
+  /**
+   * @param {HTMLCanvasElement} canvas - Canvas del juego
+   * @param {Object} stateManager - Gestor de estados
+   */
   constructor(canvas, stateManager) {
     super(canvas, stateManager, 2);
 
-    // Capas parallax específicas del Nivel 2 (espacio con planetas)
     this.layers = [
       {
         name: "fondo",
@@ -33,7 +40,6 @@ class Level2State extends BaseLevel {
       },
     ];
 
-    // Sol (elemento decorativo específico del nivel 2)
     this.sol = {
       x: 800,
       y: 50,
@@ -43,30 +49,56 @@ class Level2State extends BaseLevel {
     };
   }
 
+  /**
+   * Configura los parámetros de dificultad específicos del Nivel 2
+   * @override
+   * @param {string} difficulty - Nivel de dificultad ('facil', 'medio', 'dificil')
+   */
   configureDifficulty(difficulty) {
     const configs = {
-      facil: { maxEnemies: 15, spawnInterval: 2.5, shootCooldown: 1.8, health: 3, damage: 8 },
-      medio: { maxEnemies: 25, spawnInterval: 2, shootCooldown: 1.3, health: 4, damage: 12 },
-      dificil: { maxEnemies: 35, spawnInterval: 1.5, shootCooldown: 1, health: 6, damage: 18 }
+      facil: {
+        maxEnemies: 15,
+        spawnInterval: 2.5,
+        shootCooldown: 1.8,
+        health: 3,
+        damage: 8,
+      },
+      medio: {
+        maxEnemies: 25,
+        spawnInterval: 2,
+        shootCooldown: 1.3,
+        health: 4,
+        damage: 12,
+      },
+      dificil: {
+        maxEnemies: 35,
+        spawnInterval: 1.5,
+        shootCooldown: 1,
+        health: 6,
+        damage: 18,
+      },
     };
-    
+
     const config = configs[difficulty] || configs.medio;
     Object.assign(this, {
       maxEnemies: config.maxEnemies,
       enemySpawnInterval: config.spawnInterval,
       enemyShootCooldown: config.shootCooldown,
       enemyHealth: config.health,
-      enemyDamage: config.damage
+      enemyDamage: config.damage,
     });
-    
-    console.log(`Nivel 2 - ${difficulty} - ${this.maxEnemies} enemigos con ${this.enemyHealth} HP`);
+
+    console.log(
+      `Nivel 2 - ${difficulty} - ${this.maxEnemies} enemigos con ${this.enemyHealth} HP`
+    );
   }
 
-  // Carga de assets específicos del Nivel 2
+  /**
+   * Carga los assets específicos del Nivel 2 (escenario espacial, planetas y naves)
+   * @override
+   */
   async loadLevelAssets() {
     try {
-      console.log("Iniciando carga de assets del Nivel 2...");
-
       await loader.loadImages({
         escenario_n2: "assets/images/escenarios/escenario_n2.jpg",
         tierra_n2: "assets/images/escenarios/tierra.png",
@@ -84,7 +116,6 @@ class Level2State extends BaseLevel {
 
       this.naveTerrestre.image = loader.getImage("nave_terrestre");
 
-      console.log("Assets del Nivel 2 cargados correctamente");
       this.assetsLoaded = true;
       this.isLoading = false;
     } catch (error) {
@@ -93,16 +124,32 @@ class Level2State extends BaseLevel {
     }
   }
 
+  /**
+   * Renderiza las capas parallax del Nivel 2 (fondo espacial, sol, tierra y luna)
+   * @override
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado
+   */
   renderParallaxLayers(ctx) {
-    // Fondo
     if (this.layers[0].image) {
-      ctx.drawImage(this.layers[0].image, 0, 0, this.canvas.width, this.canvas.height);
+      ctx.drawImage(
+        this.layers[0].image,
+        0,
+        0,
+        this.canvas.width,
+        this.canvas.height
+      );
     }
 
-    // Sol con brillo
     if (this.sol) {
       ctx.save();
-      const glow = ctx.createRadialGradient(this.sol.x, this.sol.y, 0, this.sol.x, this.sol.y, this.sol.radius * 1.5);
+      const glow = ctx.createRadialGradient(
+        this.sol.x,
+        this.sol.y,
+        0,
+        this.sol.x,
+        this.sol.y,
+        this.sol.radius * 1.5
+      );
       glow.addColorStop(0, this.sol.color);
       glow.addColorStop(0.5, this.sol.glowColor);
       glow.addColorStop(1, "rgba(255, 215, 0, 0)");
@@ -117,18 +164,28 @@ class Level2State extends BaseLevel {
       ctx.restore();
     }
 
-    // Tierra y Luna
-    [1, 2].forEach(i => {
+    [1, 2].forEach((i) => {
       const layer = this.layers[i];
       if (layer?.image) {
         const scale = layer.scale || 1;
-        ctx.drawImage(layer.image, layer.x, layer.y, layer.image.width * scale, layer.image.height * scale);
+        ctx.drawImage(
+          layer.image,
+          layer.x,
+          layer.y,
+          layer.image.width * scale,
+          layer.image.height * scale
+        );
       }
     });
   }
 
+  /**
+   * Dispara una bala enemiga con 30% de probabilidad de ser venenosa
+   * @override
+   * @param {Object} enemy - Enemigo que dispara
+   */
   enemyShoot(enemy) {
-    this.enemyBullets.push({
+    this.entityManager.addEnemyBullet({
       x: enemy.x,
       y: enemy.y + enemy.height / 2 - this.enemyBulletHeight / 2,
       width: this.enemyBulletWidth,
@@ -136,14 +193,18 @@ class Level2State extends BaseLevel {
       speed: -this.enemyBulletSpeed,
       scale: 3,
       image: loader.getImage("bala_enemiga"),
-      isPoison: Math.random() < 0.3 // 30% veneno
+      isPoison: Math.random() < 0.3,
     });
   }
 
-  // Sobrescribir renderizado de balas enemigas para mostrar balas venenosas en morado
+  /**
+   * Renderiza los elementos principales del juego incluyendo balas venenosas con efectos visuales
+   * @override
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado
+   */
   renderMainElements(ctx) {
-    // Renderizar balas del jugador
-    this.bullets.forEach((bullet) => {
+    const bullets = this.entityManager.getBullets();
+    bullets.forEach((bullet) => {
       if (bullet.image) {
         ctx.drawImage(
           bullet.image,
@@ -158,15 +219,13 @@ class Level2State extends BaseLevel {
       }
     });
 
-    // Renderizar balas enemigas (con soporte para balas venenosas)
     const balaEnemigaImg = loader.getImage("bala_enemiga");
+    const enemyBullets = this.entityManager.getEnemyBullets();
 
-    this.enemyBullets.forEach((bullet) => {
+    enemyBullets.forEach((bullet) => {
       if (bullet.isPoison) {
-        // Bala venenosa - morado/púrpura con efecto eléctrico
         ctx.save();
-        
-        // Efecto de energía eléctrica pulsante
+
         const pulse = Math.sin(Date.now() / 100) * 0.3 + 0.7;
         const gradient = ctx.createRadialGradient(
           bullet.x + bullet.width / 2,
@@ -176,10 +235,10 @@ class Level2State extends BaseLevel {
           bullet.y + bullet.height / 2,
           bullet.width * pulse
         );
-        gradient.addColorStop(0, '#a0f');
-        gradient.addColorStop(0.4, '#80d');
-        gradient.addColorStop(1, 'rgba(128, 0, 255, 0)');
-        
+        gradient.addColorStop(0, "#a0f");
+        gradient.addColorStop(0.4, "#80d");
+        gradient.addColorStop(1, "rgba(128, 0, 255, 0)");
+
         ctx.fillStyle = gradient;
         ctx.fillRect(
           bullet.x - 10,
@@ -187,20 +246,20 @@ class Level2State extends BaseLevel {
           bullet.width + 20,
           bullet.height + 20
         );
-        
-        // Bala venenosa sólida (morado)
+
         const coreGradient = ctx.createLinearGradient(
-          bullet.x, bullet.y,
-          bullet.x + bullet.width, bullet.y + bullet.height
+          bullet.x,
+          bullet.y,
+          bullet.x + bullet.width,
+          bullet.y + bullet.height
         );
-        coreGradient.addColorStop(0, '#d0f');
-        coreGradient.addColorStop(0.5, '#a0d');
-        coreGradient.addColorStop(1, '#80c');
+        coreGradient.addColorStop(0, "#d0f");
+        coreGradient.addColorStop(0.5, "#a0d");
+        coreGradient.addColorStop(1, "#80c");
         ctx.fillStyle = coreGradient;
         ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
-        
-        // Chispas eléctricas (líneas aleatorias)
-        ctx.strokeStyle = '#f0f';
+
+        ctx.strokeStyle = "#f0f";
         ctx.lineWidth = 2;
         for (let i = 0; i < 3; i++) {
           const offsetX = (Math.random() - 0.5) * 20;
@@ -213,15 +272,13 @@ class Level2State extends BaseLevel {
           );
           ctx.stroke();
         }
-        
-        // Borde brillante
-        ctx.strokeStyle = '#fff';
+
+        ctx.strokeStyle = "#fff";
         ctx.lineWidth = 2;
         ctx.strokeRect(bullet.x, bullet.y, bullet.width, bullet.height);
-        
+
         ctx.restore();
       } else if (balaEnemigaImg) {
-        // Bala normal
         ctx.drawImage(
           balaEnemigaImg,
           bullet.x,
@@ -230,13 +287,11 @@ class Level2State extends BaseLevel {
           bullet.height
         );
       } else {
-        // Fallback bala normal
         ctx.fillStyle = "#f00";
         ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
       }
     });
 
-    // Renderizar nave del jugador
     if (this.naveTerrestre.image && !this.naveTerrestre.isDestroyed) {
       const healthPercent =
         this.naveTerrestre.health / this.naveTerrestre.maxHealth;
@@ -255,8 +310,8 @@ class Level2State extends BaseLevel {
       ctx.globalAlpha = 1.0;
     }
 
-    // Renderizar enemigos
-    this.enemies.forEach((enemy) => {
+    const enemies = this.entityManager.getEnemies();
+    enemies.forEach((enemy) => {
       if (enemy.image) {
         if (enemy.isFalling) {
           ctx.save();
@@ -280,7 +335,7 @@ class Level2State extends BaseLevel {
           );
 
           const healthPercent = enemy.health / enemy.maxHealth;
-          this.renderHealthBar(
+          RenderHelpers.renderHealthBar(
             ctx,
             enemy.x,
             enemy.y - 10,

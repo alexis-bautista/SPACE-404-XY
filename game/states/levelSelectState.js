@@ -1,7 +1,14 @@
-// Estado de selección de niveles
 import { loader } from "../../engine/loader.js";
+import { audioManager } from "../utils/audioManager.js";
 
+/**
+ * Estado de selección de niveles con botones de navegación y control de audio
+ */
 class LevelSelectState {
+  /**
+   * @param {HTMLCanvasElement} canvas - Canvas del juego
+   * @param {Object} stateManager - Gestor de estados
+   */
   constructor(canvas, stateManager) {
     this.canvas = canvas;
     this.stateManager = stateManager;
@@ -10,29 +17,32 @@ class LevelSelectState {
       { id: 2, x: 400, y: 200, width: 64, height: 64 },
       { id: 3, x: 650, y: 200, width: 64, height: 64 },
     ];
-    // Áreas de botones
     this.buttons = {
       back: { x: 0, y: 0, width: 0, height: 0 },
       sound: { x: 0, y: 0, width: 0, height: 0 },
     };
   }
 
+  /**
+   * Inicializa el estado y asegura que la música del menú continúe
+   */
   enter() {
     console.log("Entrando a selección de niveles");
-    this.menuMusic = document.getElementById('menuMusic');
-    
-    // Continuar reproduciendo la música si no está sonando
-    if (this.menuMusic && this.menuMusic.paused) {
-      this.menuMusic.play().catch(err => console.log('Error reproduciendo música:', err));
-    }
+
+    audioManager.playMenuMusic();
   }
 
-  update(dt) {
-    // TODO: lógica de selección de niveles
-  }
+  /**
+   * Actualiza la lógica del estado
+   * @param {number} dt - Delta time en segundos
+   */
+  update(dt) {}
 
+  /**
+   * Renderiza la pantalla de selección de niveles
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado
+   */
   render(ctx) {
-    // 1. Dibujar imagen de fondo
     const fondoDesenfocado = loader.getImage("fondo_desenfocado");
     if (fondoDesenfocado) {
       ctx.drawImage(
@@ -44,13 +54,11 @@ class LevelSelectState {
       );
     }
 
-    // 2. Título
     ctx.fillStyle = "#eee";
     ctx.font = "36px system-ui";
     ctx.textAlign = "center";
     ctx.fillText("Selecciona un Nivel", this.canvas.width / 2, 100);
 
-    // 3. Dibujar niveles
     const nivel1 = loader.getImage("nivel1");
     const nivel2 = loader.getImage("nivel2");
     const nivel3 = loader.getImage("nivel3");
@@ -85,14 +93,12 @@ class LevelSelectState {
       );
     }
 
-    // 4. Etiquetas de niveles
     ctx.font = "20px system-ui";
     ctx.fillStyle = "#fff";
     ctx.fillText("Nivel 1", this.levels[0].x + 32, this.levels[0].y + 90);
     ctx.fillText("Nivel 2", this.levels[1].x + 32, this.levels[1].y + 90);
     ctx.fillText("Nivel 3", this.levels[2].x + 32, this.levels[2].y + 90);
 
-    // 5. Botón Back
     const backBtn = loader.getImage("back");
     if (backBtn) {
       const backX = 20;
@@ -100,7 +106,6 @@ class LevelSelectState {
       const newWidth = backBtn.width * 2.5;
       const newHeight = backBtn.height * 2.5;
       ctx.drawImage(backBtn, backX, backY, newWidth, newHeight);
-      // Guardar posición para detección de clics
       this.buttons.back = {
         x: backX,
         y: backY,
@@ -109,7 +114,6 @@ class LevelSelectState {
       };
     }
 
-    // 6. Botón Sound
     const soundBtn = loader.getImage("sound");
     if (soundBtn) {
       const soundX = 20;
@@ -117,22 +121,20 @@ class LevelSelectState {
       const newWidth = soundBtn.width * 2.5;
       const newHeight = soundBtn.height * 2.5;
       ctx.drawImage(soundBtn, soundX, soundY, newWidth, newHeight);
-      
-      // Guardar posición para detección de clics
+
       this.buttons.sound = {
         x: soundX,
         y: soundY,
         width: newWidth,
         height: newHeight,
       };
-      
-      // Si está silenciado, dibujar una X roja sobre el botón
-      if (this.menuMusic && this.menuMusic.muted) {
+
+      const settings = audioManager.getSettings();
+      if (!settings.musicEnabled) {
         ctx.strokeStyle = "#ff0000";
         ctx.lineWidth = 4;
         ctx.lineCap = "round";
-        
-        // Dibujar X
+
         const padding = 10;
         ctx.beginPath();
         ctx.moveTo(soundX + padding, soundY + padding);
@@ -140,24 +142,36 @@ class LevelSelectState {
         ctx.moveTo(soundX + newWidth - padding, soundY + padding);
         ctx.lineTo(soundX + padding, soundY + newHeight - padding);
         ctx.stroke();
-        
-        // Dibujar círculo rojo alrededor
+
         ctx.strokeStyle = "#ff0000";
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.arc(soundX + newWidth/2, soundY + newHeight/2, newWidth/2 + 5, 0, Math.PI * 2);
+        ctx.arc(
+          soundX + newWidth / 2,
+          soundY + newHeight / 2,
+          newWidth / 2 + 5,
+          0,
+          Math.PI * 2
+        );
         ctx.stroke();
       }
     }
   }
 
+  /**
+   * Limpia el estado al salir
+   */
   exit() {
     console.log("Saliendo de selección de niveles");
   }
 
-  // Verificar si se hizo clic en un nivel o botón
+  /**
+   * Maneja los clics en niveles y botones
+   * @param {number} x - Coordenada X del clic
+   * @param {number} y - Coordenada Y del clic
+   * @returns {string|number|null} Acción ejecutada o nivel seleccionado
+   */
   handleClick(x, y) {
-    // Verificar clic en botón Back
     if (
       x >= this.buttons.back.x &&
       x <= this.buttons.back.x + this.buttons.back.width &&
@@ -169,7 +183,6 @@ class LevelSelectState {
       return "back";
     }
 
-    // Verificar clic en botón Sound
     if (
       x >= this.buttons.sound.x &&
       x <= this.buttons.sound.x + this.buttons.sound.width &&
@@ -177,14 +190,12 @@ class LevelSelectState {
       y <= this.buttons.sound.y + this.buttons.sound.height
     ) {
       console.log("Botón Sound presionado");
-      if (this.menuMusic) {
-        this.menuMusic.muted = !this.menuMusic.muted;
-        console.log('Muted:', this.menuMusic.muted);
-      }
+      audioManager.toggleMusic();
+      const settings = audioManager.getSettings();
+      console.log("Música habilitada:", settings.musicEnabled);
       return "sound";
     }
 
-    // Verificar clic en niveles
     for (let level of this.levels) {
       if (
         x >= level.x &&
@@ -193,7 +204,6 @@ class LevelSelectState {
         y <= level.y + level.height
       ) {
         console.log(`Nivel ${level.id} seleccionado`);
-        // Cambiar al estado del nivel correspondiente
         if (level.id === 1) {
           this.stateManager.setState("level1");
         } else if (level.id === 2) {
@@ -207,7 +217,10 @@ class LevelSelectState {
     return null;
   }
 
-  // Manejar teclas del teclado
+  /**
+   * Maneja las teclas presionadas
+   * @param {string} key - Tecla presionada
+   */
   handleKeyDown(key) {
     if (key === "Escape") {
       console.log("Tecla Escape presionada - Regresando al menú");

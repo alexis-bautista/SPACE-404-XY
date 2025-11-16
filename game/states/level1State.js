@@ -1,12 +1,18 @@
-// Estado del Nivel 1 con efecto Parallax
 import { loader } from "../../engine/loader.js";
 import BaseLevel from "./baseLevel.js";
 
+/**
+ * Estado del Nivel 1 con efecto parallax y escenario urbano
+ * @extends BaseLevel
+ */
 class Level1State extends BaseLevel {
+  /**
+   * @param {HTMLCanvasElement} canvas - Canvas del juego
+   * @param {Object} stateManager - Gestor de estados
+   */
   constructor(canvas, stateManager) {
     super(canvas, stateManager, 1);
 
-    // Capas parallax específicas del Nivel 1
     this.layers = [
       {
         name: "fondo",
@@ -39,11 +45,12 @@ class Level1State extends BaseLevel {
     ];
   }
 
-  // Sobrescribir método de carga de assets específicos del Nivel 1
+  /**
+   * Carga los assets específicos del Nivel 1 (imágenes de escenario, edificios y naves)
+   * @override
+   */
   async loadLevelAssets() {
     try {
-      console.log("Iniciando carga de assets del Nivel 1...");
-
       await loader.loadImages({
         escenario_n1: "assets/images/escenarios/escenario_n1.jpg",
         edificio1_n1: "assets/images/escenarios/edificio1_n1.png",
@@ -63,7 +70,6 @@ class Level1State extends BaseLevel {
 
       this.naveTerrestre.image = loader.getImage("nave_terrestre");
 
-      console.log("Assets del Nivel 1 cargados correctamente");
       this.assetsLoaded = true;
       this.isLoading = false;
     } catch (error) {
@@ -72,7 +78,11 @@ class Level1State extends BaseLevel {
     }
   }
 
-  // Sobrescribir renderizado de capas parallax específicas del Nivel 1
+  /**
+   * Renderiza las capas parallax específicas del Nivel 1 (fondo y tres edificios)
+   * @override
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado
+   */
   renderParallaxLayers(ctx) {
     const fondoLayer = this.layers[0];
     if (fondoLayer.image) {

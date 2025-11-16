@@ -1,17 +1,21 @@
-// Estado de Nivel Completado
 import { loader } from "../../engine/loader.js";
 
+/**
+ * Estado de nivel completado con variantes para niveles intermedios y final
+ */
 class LevelCompleteState {
+  /**
+   * @param {HTMLCanvasElement} canvas - Canvas del juego
+   * @param {Object} stateManager - Gestor de estados
+   */
   constructor(canvas, stateManager) {
     this.canvas = canvas;
     this.stateManager = stateManager;
 
-    // Estado del nivel de fondo (congelado)
     this.backgroundState = null;
     this.backgroundStateName = "";
-    this.currentLevel = 1; // Nivel actual completado
+    this.currentLevel = 1;
 
-    // Posiciones de botones
     this.buttons = {
       siguienteNivel: { x: 0, y: 0, width: 0, height: 0 },
       reiniciar: { x: 0, y: 0, width: 0, height: 0 },
@@ -19,43 +23,52 @@ class LevelCompleteState {
     };
   }
 
+  /**
+   * Inicializa el estado reproduciendo sonido de victoria y pausando música
+   */
   enter() {
     console.log("Entrando a Level Complete");
-    
-    // Reproducir sonido de victoria
+
     if (window.playSoundEffect) {
-      window.playSoundEffect('winSound');
+      window.playSoundEffect("winSound");
     }
-    
-    // Pausar música del juego
-    const gameMusic = document.getElementById('gameMusic');
+
+    const gameMusic = document.getElementById("gameMusic");
     if (gameMusic) {
       gameMusic.pause();
     }
   }
 
-  update(dt) {
-    // No hay animaciones por ahora
-  }
+  /**
+   * Actualiza la lógica del estado
+   * @param {number} dt - Delta time en segundos
+   */
+  update(dt) {}
 
-  // Configurar el estado de fondo (el nivel actual)
+  /**
+   * Configura el estado de fondo mostrando el nivel congelado
+   * @param {Object} state - Estado del nivel a mostrar de fondo
+   * @param {string} stateName - Nombre del estado
+   * @param {number} level - Número del nivel completado
+   */
   setBackgroundState(state, stateName, level) {
     this.backgroundState = state;
     this.backgroundStateName = stateName;
     this.currentLevel = level || 1;
   }
 
+  /**
+   * Renderiza la pantalla de nivel completado con overlay y botones
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado
+   */
   render(ctx) {
-    // 1. Renderizar el estado de fondo (el nivel congelado)
     if (this.backgroundState) {
       this.backgroundState.render(ctx);
     }
 
-    // 2. Overlay oscuro semitransparente
     ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Verificar si es el nivel 3 (último nivel)
     if (this.currentLevel === 3) {
       this.renderGameComplete(ctx);
     } else {
@@ -63,9 +76,11 @@ class LevelCompleteState {
     }
   }
 
-  // Renderizar pantalla de nivel completado (niveles 1 y 2)
+  /**
+   * Renderiza la pantalla de nivel completado para niveles intermedios (1 y 2)
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado
+   */
   renderLevelComplete(ctx) {
-    // 3. Panel central para el menú de nivel completado
     const panelWidth = 600;
     const panelHeight = 450;
     const panelX = (this.canvas.width - panelWidth) / 2;
@@ -73,13 +88,11 @@ class LevelCompleteState {
 
     this.drawRoundedRect(ctx, panelX, panelY, panelWidth, panelHeight, 20);
 
-    // 4. Título "NIVEL COMPLETADO"
     ctx.fillStyle = "#4bd";
     ctx.font = "bold 42px system-ui";
     ctx.textAlign = "center";
     ctx.fillText("NIVEL COMPLETADO", this.canvas.width / 2, panelY + 70);
 
-    // 5. Mensaje de felicitación
     ctx.fillStyle = "#eee";
     ctx.font = "20px system-ui";
     ctx.fillText(
@@ -88,12 +101,10 @@ class LevelCompleteState {
       panelY + 120
     );
 
-    // Posiciones centrales para los botones
     const centerX = this.canvas.width / 2;
     const startY = panelY + 170;
     const spacing = 80;
 
-    // 6. Botón Siguiente Nivel
     const siguienteNivelBtn = loader.getImage("siguiente_nivel");
     if (siguienteNivelBtn) {
       const btnX = centerX - siguienteNivelBtn.width / 2;
@@ -107,7 +118,6 @@ class LevelCompleteState {
       };
     }
 
-    // 7. Botón Reiniciar
     const reiniciarBtn = loader.getImage("reiniciar");
     if (reiniciarBtn) {
       const btnX = centerX - reiniciarBtn.width / 2;
@@ -121,7 +131,6 @@ class LevelCompleteState {
       };
     }
 
-    // 8. Botón Menú Principal
     const menuPrincipalBtn = loader.getImage("menu_principal");
     if (menuPrincipalBtn) {
       const btnX = centerX - menuPrincipalBtn.width / 2;
@@ -135,7 +144,6 @@ class LevelCompleteState {
       };
     }
 
-    // 9. Indicación de tecla ESC
     ctx.fillStyle = "#aaa";
     ctx.font = "14px system-ui";
     ctx.textAlign = "center";
@@ -146,9 +154,11 @@ class LevelCompleteState {
     );
   }
 
-  // Renderizar pantalla de juego completado (nivel 3)
+  /**
+   * Renderiza la pantalla de juego completado para el nivel final (3)
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado
+   */
   renderGameComplete(ctx) {
-    // Panel central más grande
     const panelWidth = 700;
     const panelHeight = 500;
     const panelX = (this.canvas.width - panelWidth) / 2;
@@ -156,13 +166,11 @@ class LevelCompleteState {
 
     this.drawRoundedRect(ctx, panelX, panelY, panelWidth, panelHeight, 20);
 
-    // Título "JUEGO COMPLETADO" en dorado
     ctx.fillStyle = "#FFD700";
     ctx.font = "bold 48px system-ui";
     ctx.textAlign = "center";
     ctx.fillText("JUEGO COMPLETADO", this.canvas.width / 2, panelY + 80);
 
-    // Mensaje de victoria en dos líneas
     ctx.fillStyle = "#4bd";
     ctx.font = "bold 28px system-ui";
     ctx.fillText("¡Felicidades!", this.canvas.width / 2, panelY + 150);
@@ -175,20 +183,16 @@ class LevelCompleteState {
       panelY + 190
     );
 
-    // Estrellas decorativas
     ctx.fillStyle = "#FFD700";
     ctx.font = "40px system-ui";
     ctx.fillText("★ ★ ★", this.canvas.width / 2, panelY + 240);
 
-    // Posiciones centrales para los botones
     const centerX = this.canvas.width / 2;
     const startY = panelY + 290;
     const spacing = 80;
 
-    // Ocultar botón siguiente nivel para nivel 3
     this.buttons.siguienteNivel = { x: -1000, y: -1000, width: 0, height: 0 };
 
-    // Botón Reiniciar
     const reiniciarBtn = loader.getImage("reiniciar");
     if (reiniciarBtn) {
       const btnX = centerX - reiniciarBtn.width / 2;
@@ -202,7 +206,6 @@ class LevelCompleteState {
       };
     }
 
-    // Botón Menú Principal
     const menuPrincipalBtn = loader.getImage("menu_principal");
     if (menuPrincipalBtn) {
       const btnX = centerX - menuPrincipalBtn.width / 2;
@@ -216,7 +219,6 @@ class LevelCompleteState {
       };
     }
 
-    // Indicación de tecla ESC
     ctx.fillStyle = "#aaa";
     ctx.font = "14px system-ui";
     ctx.textAlign = "center";
@@ -227,7 +229,15 @@ class LevelCompleteState {
     );
   }
 
-  // Función auxiliar para dibujar rectángulos con bordes redondeados
+  /**
+   * Dibuja un rectángulo con bordes redondeados
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado
+   * @param {number} x - Posición X
+   * @param {number} y - Posición Y
+   * @param {number} width - Ancho
+   * @param {number} height - Alto
+   * @param {number} radius - Radio de las esquinas
+   */
   drawRoundedRect(ctx, x, y, width, height, radius) {
     ctx.fillStyle = "rgba(20, 20, 30, 0.95)";
     ctx.beginPath();
@@ -243,18 +253,25 @@ class LevelCompleteState {
     ctx.closePath();
     ctx.fill();
 
-    // Borde
     ctx.strokeStyle = "#4bd";
     ctx.lineWidth = 3;
     ctx.stroke();
   }
 
+  /**
+   * Limpia el estado al salir
+   */
   exit() {
     console.log("Saliendo de Level Complete");
   }
 
+  /**
+   * Maneja los clics en los botones de la pantalla
+   * @param {number} x - Coordenada X del clic
+   * @param {number} y - Coordenada Y del clic
+   * @returns {string|null} Acción ejecutada o null
+   */
   handleClick(x, y) {
-    // Botón Siguiente Nivel
     if (
       x >= this.buttons.siguienteNivel.x &&
       x <= this.buttons.siguienteNivel.x + this.buttons.siguienteNivel.width &&
@@ -263,27 +280,21 @@ class LevelCompleteState {
     ) {
       console.log("Avanzando al siguiente nivel");
 
-      // Determinar el siguiente nivel
       const nextLevel = this.currentLevel + 1;
 
-      // Verificar si hay más niveles disponibles
       if (nextLevel > 3) {
         console.log("No hay más niveles disponibles");
         this.stateManager.setState("levelSelect");
       } else if (nextLevel === 2) {
-        // Ir al nivel 2
         console.log("Cargando Nivel 2");
         this.stateManager.setState("level2");
       } else if (nextLevel === 3) {
-        // Ir al nivel 3
         console.log("Cargando Nivel 3");
         this.stateManager.setState("level3");
       }
 
       return "siguienteNivel";
     }
-
-    // Botón Reiniciar
     if (
       x >= this.buttons.reiniciar.x &&
       x <= this.buttons.reiniciar.x + this.buttons.reiniciar.width &&
@@ -310,7 +321,6 @@ class LevelCompleteState {
     ) {
       console.log("Regresando al menú principal");
 
-      // Resetear el nivel antes de ir al menú principal
       if (
         this.backgroundState &&
         typeof this.backgroundState.restart === "function"
@@ -325,12 +335,14 @@ class LevelCompleteState {
     return null;
   }
 
+  /**
+   * Maneja las teclas presionadas
+   * @param {string} key - Tecla presionada
+   */
   handleKeyDown(key) {
-    // Presionar ESC para volver a la selección de niveles
     if (key === "Escape") {
       console.log("Regresando a la selección de niveles");
 
-      // Resetear el nivel antes de salir
       if (
         this.backgroundState &&
         typeof this.backgroundState.restart === "function"

@@ -1,7 +1,23 @@
-// Clase base para los niveles del juego
+/**
+ * Clase base para niveles del juego.
+ * Proporciona funcionalidad común para control del jugador, aparición de enemigos,
+ * detección de colisiones, simulación física y renderizado. Las subclases deben
+ * implementar comportamiento específico del nivel.
+ */
 import { loader } from "../../engine/loader.js";
+import PhysicsManager from "../utils/physicsManager.js";
+import EntityManager from "../utils/entityManager.js";
+import TouchControlsManager from "../utils/touchControlsManager.js";
+import { RenderHelpers } from "../utils/renderHelpers.js";
+import { CollisionHelpers } from "../utils/collisionHelpers.js";
+import { audioManager } from "../utils/audioManager.js";
 
 class BaseLevel {
+  /**
+   * @param {HTMLCanvasElement} canvas - Lienzo del juego
+   * @param {Object} stateManager - Instancia del gestor de estados
+   * @param {number} levelNumber - Número del nivel actual (1, 2 o 3)
+   */
   constructor(canvas, stateManager, levelNumber) {
     this.canvas = canvas;
     this.stateManager = stateManager;
@@ -9,12 +25,10 @@ class BaseLevel {
     this.isLoading = true;
     this.assetsLoaded = false;
 
-    // Game state variables
     this.levelProgress = 0;
     this.playerHealth = 100;
     this.levelCompleted = false;
 
-    // Botón de menú
     this.menuButton = {
       x: 20,
       y: 20,
@@ -23,7 +37,6 @@ class BaseLevel {
       scale: 2.5,
     };
 
-    // Configuración de barras HUD
     this.bars = {
       progress: {
         x: 0,
@@ -45,14 +58,11 @@ class BaseLevel {
       },
     };
 
-    // Calcular posición X de las barras (esquina superior derecha)
     this.bars.progress.x = this.canvas.width - this.bars.progress.width - 15;
     this.bars.health.x = this.canvas.width - this.bars.health.width - 15;
 
-    // Capas parallax (se sobrescribe en cada nivel)
     this.layers = [];
 
-    // Nave del jugador
     this.naveTerrestre = {
       image: null,
       x: 100,
@@ -69,8 +79,10 @@ class BaseLevel {
       fallAcceleration: 400,
     };
 
-    // Sistema de balas del jugador
-    this.bullets = [];
+    this.entityManager = new EntityManager();
+    this.physicsManager = new PhysicsManager();
+    this.touchControls = new TouchControlsManager(canvas);
+
     this.bulletSpeed = 500;
     this.bulletWidth = 50;
     this.bulletHeight = 10;
@@ -78,8 +90,6 @@ class BaseLevel {
     this.shootCooldown = 0.2;
     this.shootTimer = 0;
 
-    // Sistema de enemigos
-    this.enemies = [];
     this.enemySpeed = 150;
     this.enemyVerticalSpeed = 100;
     this.enemyWidth = 80;
@@ -92,195 +102,76 @@ class BaseLevel {
     this.enemyHealth = 3;
     this.enemyDamage = 10;
 
-    // Sistema de balas enemigas
-    this.enemyBullets = [];
     this.enemyBulletSpeed = 400;
     this.enemyBulletWidth = 70;
     this.enemyBulletHeight = 30;
     this.enemyShootCooldown = 1.5;
 
-    // Sistema de veneno (Nivel 2)
     this.poisonState = {
       isPoisoned: false,
       duration: 0,
-      maxDuration: 5, // 5 segundos
-      damagePerSecond: 1, // 1 de daño por segundo
+      maxDuration: 5,
+      damagePerSecond: 1,
       damageTimer: 0,
-      damageInterval: 0.5, // Cada 0.5 segundos hace daño
+      damageInterval: 0.5,
     };
 
-    // Control de teclas
     this.keys = {
       ArrowUp: false,
       ArrowDown: false,
       ArrowRight: false,
     };
 
-    // Controles táctiles
-    // Cargar posiciones guardadas desde localStorage
-    const savedPositions = this.loadHudPositions();
-    this.touchControls = {
-      enabled: true, // Siempre habilitado, se mostrará según el tamaño de pantalla
-      buttons: {
-        up: { x: savedPositions.up.x, y: savedPositions.up.y, radius: 40, pressed: false },
-        down: { x: savedPositions.down.x, y: savedPositions.down.y, radius: 40, pressed: false },
-        shoot: { x: savedPositions.shoot.x, y: savedPositions.shoot.y, radius: 50, pressed: false },
-      },
-      activeTouches: new Map(), // Mapeo de touch ID a botón
-    };
-
-    // Box2D - Sistema de física
-    this.world = null;
-    this.physicsBodies = new Map();
-    this.SCALE = 30;
-    this.physicsInitialized = false;
-
-    // Inicializar Box2D
-    this.initBox2D();
+    this.touchControls.loadPositions();
+    this.physicsManager.initialize();
+    this.setupPhysicsCollisions();
   }
 
-  // Cargar posiciones guardadas de los botones HUD
-  loadHudPositions() {
-    try {
-      const saved = localStorage.getItem('hudButtonPositions');
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.error('Error cargando posiciones HUD:', e);
-    }
-    // Valores por defecto si no hay guardado
-    return {
-      up: { x: 50, y: 350 },
-      down: { x: 50, y: 450 },
-      shoot: { x: 860, y: 400 }
-    };
-  }
+  /**
+   * Configura los listeners de colisión Box2D para las entidades del juego
+   */
+  setupPhysicsCollisions() {
+    this.physicsManager.setContactListener((dataA, dataB, bodyA, bodyB) => {
+      if (!dataA || !dataB) return;
 
-  // ========== SISTEMA DE FÍSICA BOX2D ==========
-
-  initBox2D() {
-    try {
-      if (typeof Box2D === "undefined") {
-        console.warn(
-          "Box2D no está disponible. Usando colisiones AABB simples."
-        );
-        this.physicsInitialized = false;
-        return;
+      if (
+        (dataA.type === "playerBullet" && dataB.type === "enemy") ||
+        (dataA.type === "enemy" && dataB.type === "playerBullet")
+      ) {
+        const bullet = dataA.type === "playerBullet" ? dataA : dataB;
+        const enemy = dataA.type === "enemy" ? dataA : dataB;
+        this.handlePlayerBulletHitsEnemy(bullet, enemy);
       }
 
-      const b2Vec2 = Box2D.Common.Math.b2Vec2;
-      const b2World = Box2D.Dynamics.b2World;
-      const b2BodyDef = Box2D.Dynamics.b2BodyDef;
-      const b2Body = Box2D.Dynamics.b2Body;
-      const b2FixtureDef = Box2D.Dynamics.b2FixtureDef;
-      const b2PolygonShape = Box2D.Collision.Shapes.b2PolygonShape;
-      const b2ContactListener = Box2D.Dynamics.b2ContactListener;
-
-      this.b2Vec2 = b2Vec2;
-      this.b2World = b2World;
-      this.b2BodyDef = b2BodyDef;
-      this.b2Body = b2Body;
-      this.b2FixtureDef = b2FixtureDef;
-      this.b2PolygonShape = b2PolygonShape;
-
-      const gravity = new b2Vec2(0, 20);
-      this.world = new b2World(gravity, true);
-
-      const contactListener = new b2ContactListener();
-      contactListener.BeginContact = (contact) => {
-        this.handleBox2DCollision(contact);
-      };
-
-      this.world.SetContactListener(contactListener);
-
-      this.physicsInitialized = true;
-      console.log("Box2D inicializado correctamente");
-    } catch (error) {
-      console.error("Error al inicializar Box2D:", error);
-      this.physicsInitialized = false;
-    }
+      if (
+        (dataA.type === "enemyBullet" && dataB.type === "player") ||
+        (dataA.type === "player" && dataB.type === "enemyBullet")
+      ) {
+        const bullet = dataA.type === "enemyBullet" ? dataA : dataB;
+        this.handleEnemyBulletHitsPlayer(bullet);
+      }
+    });
   }
 
-  createPhysicsBody(x, y, width, height, type, userData) {
-    if (!this.physicsInitialized) return null;
-
-    const bodyDef = new this.b2BodyDef();
-
-    if (type === "dynamic") {
-      bodyDef.type = this.b2Body.b2_dynamicBody;
-    } else if (type === "kinematic") {
-      bodyDef.type = this.b2Body.b2_kinematicBody;
-    } else {
-      bodyDef.type = this.b2Body.b2_staticBody;
-    }
-
-    bodyDef.position.Set(
-      (x + width / 2) / this.SCALE,
-      (y + height / 2) / this.SCALE
-    );
-
-    bodyDef.userData = userData;
-
-    const body = this.world.CreateBody(bodyDef);
-
-    const fixtureDef = new this.b2FixtureDef();
-    fixtureDef.density = 1.0;
-    fixtureDef.friction = 0.0;
-    fixtureDef.restitution = 0.0;
-
-    const shape = new this.b2PolygonShape();
-    shape.SetAsBox(width / 2 / this.SCALE, height / 2 / this.SCALE);
-    fixtureDef.shape = shape;
-
-    body.CreateFixture(fixtureDef);
-
-    return body;
-  }
-
-  handleBox2DCollision(contact) {
-    const bodyA = contact.GetFixtureA().GetBody();
-    const bodyB = contact.GetFixtureB().GetBody();
-
-    const dataA = bodyA.GetUserData();
-    const dataB = bodyB.GetUserData();
-
-    if (!dataA || !dataB) return;
-
-    if (
-      (dataA.type === "playerBullet" && dataB.type === "enemy") ||
-      (dataA.type === "enemy" && dataB.type === "playerBullet")
-    ) {
-      const bullet = dataA.type === "playerBullet" ? dataA : dataB;
-      const enemy = dataA.type === "enemy" ? dataA : dataB;
-      this.handlePlayerBulletHitsEnemy(bullet, enemy);
-    }
-
-    if (
-      (dataA.type === "enemyBullet" && dataB.type === "player") ||
-      (dataA.type === "player" && dataB.type === "enemyBullet")
-    ) {
-      const bullet = dataA.type === "enemyBullet" ? dataA : dataB;
-      this.handleEnemyBulletHitsPlayer(bullet);
-    }
-  }
-
+  /**
+   * Maneja la colisión entre una bala del jugador y un enemigo
+   * @param {Object} bullet - Datos de la bala del jugador
+   * @param {Object} enemy - Datos de la nave enemiga
+   */
   handlePlayerBulletHitsEnemy(bullet, enemy) {
     bullet.shouldRemove = true;
 
     if (enemy.entity && !enemy.entity.isFalling) {
-      // Verificar si el enemigo tiene escudo activo
       if (enemy.entity.hasShield && enemy.entity.shieldHealth > 0) {
         enemy.entity.shieldHealth--;
         console.log(
           `¡Escudo impactado! Resistencia del escudo: ${enemy.entity.shieldHealth}/${enemy.entity.maxShieldHealth}`
         );
-        
+
         if (enemy.entity.shieldHealth <= 0) {
-          console.log('¡Escudo destruido! Enemigo vulnerable.');
+          console.log("¡Escudo destruido! Enemigo vulnerable.");
         }
       } else {
-        // Si no tiene escudo, dañar la nave
         enemy.entity.health--;
         console.log(
           `¡Impacto! Enemigo salud: ${enemy.entity.health}/${enemy.entity.maxHealth}`
@@ -292,7 +183,7 @@ class BaseLevel {
           this.enemiesDestroyed++;
 
           if (enemy.body) {
-            enemy.body.SetType(this.b2Body.b2_dynamicBody);
+            this.physicsManager.setBodyType(enemy.body, "dynamic");
           }
 
           console.log(
@@ -303,25 +194,29 @@ class BaseLevel {
     }
   }
 
+  /**
+   * Maneja la colisión entre una bala enemiga y el jugador
+   * @param {Object} bullet - Datos de la bala enemiga
+   */
   handleEnemyBulletHitsPlayer(bullet) {
     bullet.shouldRemove = true;
 
     if (this.naveTerrestre && !this.naveTerrestre.isFalling) {
       this.naveTerrestre.health -= this.enemyDamage;
       this.playerHealth = this.naveTerrestre.health;
-      
-      // Si es una bala venenosa, activar efecto de veneno
+
       if (bullet.isPoison) {
         this.poisonState.isPoisoned = true;
         this.poisonState.duration = this.poisonState.maxDuration;
         this.poisonState.damageTimer = 0;
-        console.log('⚠️ ALERTA: Sistemas electrónicos dañados - Virus detectado en la nave');
-        console.log('⚡ Energía de pulso EMP corrompiendo circuitos...');
+        console.log(
+          "ALERTA: Sistemas electrónicos dañados - Virus detectado en la nave"
+        );
+        console.log("Energía de pulso EMP corrompiendo circuitos...");
       }
-      
-      // Reproducir sonido de impacto
+
       if (window.playSoundEffect) {
-        window.playSoundEffect('impactSound');
+        window.playSoundEffect("impactSound");
       }
 
       console.log(
@@ -333,9 +228,9 @@ class BaseLevel {
         this.naveTerrestre.fallSpeed = 0;
         this.playerHealth = 0;
 
-        const playerBody = this.physicsBodies.get("player");
+        const playerBody = this.physicsManager.getBody("player");
         if (playerBody) {
-          playerBody.SetType(this.b2Body.b2_dynamicBody);
+          this.physicsManager.setBodyType(playerBody, "dynamic");
         }
 
         console.log("¡Nave terrestre destruida!");
@@ -343,52 +238,60 @@ class BaseLevel {
     }
   }
 
+  /**
+   * Sincroniza los cuerpos físicos de Box2D con las entidades del juego
+   */
   syncPhysicsToEntities() {
-    if (!this.physicsInitialized) return;
+    if (!this.physicsManager.isInitialized) return;
 
-    this.bullets.forEach((bullet, index) => {
-      const body = this.physicsBodies.get(`playerBullet_${index}`);
+    const bullets = this.entityManager.getBullets();
+    bullets.forEach((bullet, index) => {
+      const body = this.physicsManager.getBody(`playerBullet_${index}`);
       if (body) {
-        const pos = body.GetPosition();
-        bullet.x = pos.x * this.SCALE - bullet.width / 2;
-        bullet.y = pos.y * this.SCALE - bullet.height / 2;
+        const pos = this.physicsManager.getBodyPosition(body);
+        bullet.x = pos.x - bullet.width / 2;
+        bullet.y = pos.y - bullet.height / 2;
 
         if (bullet.shouldRemove) {
-          this.world.DestroyBody(body);
-          this.physicsBodies.delete(`playerBullet_${index}`);
+          this.physicsManager.removeBody(`playerBullet_${index}`);
         }
       }
     });
 
-    this.enemies.forEach((enemy, index) => {
-      const body = this.physicsBodies.get(`enemy_${index}`);
+    const enemies = this.entityManager.getEnemies();
+    enemies.forEach((enemy, index) => {
+      const body = this.physicsManager.getBody(`enemy_${index}`);
       if (body) {
-        const pos = body.GetPosition();
-        enemy.x = pos.x * this.SCALE - enemy.width / 2;
-        enemy.y = pos.y * this.SCALE - enemy.height / 2;
+        const pos = this.physicsManager.getBodyPosition(body);
+        enemy.x = pos.x - enemy.width / 2;
+        enemy.y = pos.y - enemy.height / 2;
       }
     });
 
-    this.enemyBullets.forEach((bullet, index) => {
-      const body = this.physicsBodies.get(`enemyBullet_${index}`);
+    const enemyBullets = this.entityManager.getEnemyBullets();
+    enemyBullets.forEach((bullet, index) => {
+      const body = this.physicsManager.getBody(`enemyBullet_${index}`);
       if (body) {
-        const pos = body.GetPosition();
-        bullet.x = pos.x * this.SCALE - bullet.width / 2;
-        bullet.y = pos.y * this.SCALE - bullet.height / 2;
+        const pos = this.physicsManager.getBodyPosition(body);
+        bullet.x = pos.x - bullet.width / 2;
+        bullet.y = pos.y - bullet.height / 2;
 
         if (bullet.shouldRemove) {
-          this.world.DestroyBody(body);
-          this.physicsBodies.delete(`enemyBullet_${index}`);
+          this.physicsManager.removeBody(`enemyBullet_${index}`);
         }
       }
     });
 
-    this.bullets = this.bullets.filter((b) => !b.shouldRemove);
-    this.enemyBullets = this.enemyBullets.filter((b) => !b.shouldRemove);
+    this.entityManager.bullets = bullets.filter((b) => !b.shouldRemove);
+    this.entityManager.enemyBullets = enemyBullets.filter(
+      (b) => !b.shouldRemove
+    );
   }
 
-  // ========== CONFIGURACIÓN DE DIFICULTAD ==========
-
+  /**
+   * Configura los parámetros del juego según el nivel de dificultad
+   * @param {string} difficulty - Nivel de dificultad ('facil', 'medio', 'dificil')
+   */
   configureDifficulty(difficulty) {
     switch (difficulty) {
       case "facil":
@@ -424,8 +327,9 @@ class BaseLevel {
     );
   }
 
-  // ========== CICLO DE VIDA DEL ESTADO ==========
-
+  /**
+   * Ciclo de vida del estado: Entrar al estado
+   */
   enter() {
     console.log(`Entrando al Nivel ${this.levelNumber}`);
     this.isLoading = true;
@@ -439,53 +343,34 @@ class BaseLevel {
       this.configureDifficulty("medio");
     }
 
-    // Cambiar música: detener música del menú y reproducir música del juego
-    const menuMusic = document.getElementById('menuMusic');
-    const gameMusic = document.getElementById('gameMusic');
-    
-    if (menuMusic) {
-      menuMusic.pause();
-      menuMusic.currentTime = 0;
-    }
-    
-    if (gameMusic && !gameMusic.muted) {
-      gameMusic.currentTime = 0;
-      gameMusic.play().catch(err => console.log('Error reproduciendo música del juego:', err));
-    }
-
+    audioManager.playGameMusic();
     this.loadLevelAssets();
   }
 
-  // Método abstracto - debe ser sobrescrito en cada nivel
+  /**
+   * Método abstracto: Carga los recursos específicos del nivel
+   * @abstract
+   */
   async loadLevelAssets() {
     throw new Error("loadLevelAssets() debe ser implementado en la subclase");
   }
 
+  /**
+   * Ciclo de vida del estado: Salir del estado
+   */
   exit() {
     console.log(`Saliendo del Nivel ${this.levelNumber}`);
-    
-    // Detener música del juego y volver a la música del menú
-    const menuMusic = document.getElementById('menuMusic');
-    const gameMusic = document.getElementById('gameMusic');
-    
-    if (gameMusic) {
-      gameMusic.pause();
-      gameMusic.currentTime = 0;
-    }
-    
-    if (menuMusic && !menuMusic.muted && menuMusic.paused) {
-      menuMusic.play().catch(err => console.log('Error reproduciendo música del menú:', err));
-    }
+    audioManager.stopGameMusic();
+    audioManager.playMenuMusic();
   }
 
-  // ========== ACTUALIZACIÓN DEL JUEGO ==========
-
+  /**
+   * Actualiza la lógica del juego
+   * @param {number} dt - Tiempo delta en segundos
+   */
   update(dt) {
-    if (this.physicsInitialized && this.world) {
-      const velocityIterations = 8;
-      const positionIterations = 3;
-      this.world.Step(dt, velocityIterations, positionIterations);
-      this.world.ClearForces();
+    if (this.physicsManager.isInitialized) {
+      this.physicsManager.step(dt);
       this.syncPhysicsToEntities();
     }
 
@@ -501,7 +386,8 @@ class BaseLevel {
       }
     }
 
-    const shouldShoot = this.keys.ArrowRight || this.touchControls.buttons.shoot.pressed;
+    const shouldShoot =
+      this.keys.ArrowRight || this.touchControls.isButtonPressed("shoot");
     if (shouldShoot && this.canShoot) {
       this.shoot();
     }
@@ -513,27 +399,34 @@ class BaseLevel {
     this.updateEnemyBullets(dt);
     this.checkCollisions();
     this.updateProgress();
-    this.updateTouchControls();
     this.updatePoisonEffect(dt);
   }
 
+  /**
+   * Actualiza el efecto de daño por veneno a lo largo del tiempo
+   * @param {number} dt - Tiempo delta en segundos
+   */
   updatePoisonEffect(dt) {
     if (!this.poisonState.isPoisoned) return;
 
-    // Reducir duración del veneno
     this.poisonState.duration -= dt;
-
-    // Aplicar daño periódico
     this.poisonState.damageTimer += dt;
     if (this.poisonState.damageTimer >= this.poisonState.damageInterval) {
       this.poisonState.damageTimer = 0;
-      
+
       if (this.naveTerrestre && !this.naveTerrestre.isFalling) {
-        const damage = this.poisonState.damagePerSecond * this.poisonState.damageInterval;
+        const damage =
+          this.poisonState.damagePerSecond * this.poisonState.damageInterval;
         this.naveTerrestre.health -= damage;
         this.playerHealth = this.naveTerrestre.health;
-        
-        console.log(`⚡ Cortocircuito: -${damage.toFixed(1)} HP | Integridad: ${this.naveTerrestre.health.toFixed(0)}% (${this.poisonState.duration.toFixed(1)}s restantes)`);
+
+        console.log(
+          `⚡ Cortocircuito: -${damage.toFixed(
+            1
+          )} HP | Integridad: ${this.naveTerrestre.health.toFixed(
+            0
+          )}% (${this.poisonState.duration.toFixed(1)}s restantes)`
+        );
 
         if (this.naveTerrestre.health <= 0) {
           this.naveTerrestre.isFalling = true;
@@ -544,13 +437,16 @@ class BaseLevel {
       }
     }
 
-    // Terminar efecto de veneno
     if (this.poisonState.duration <= 0) {
       this.poisonState.isPoisoned = false;
-      console.log('✅ Sistemas restaurados - Daño electrónico reparado');
+      console.log("Sistemas restaurados - Daño electrónico reparado");
     }
   }
 
+  /**
+   * Actualiza la posición y estado de la nave del jugador
+   * @param {number} dt - Tiempo delta en segundos
+   */
   updateNaveTerrestre(dt) {
     if (this.naveTerrestre.isFalling) {
       this.naveTerrestre.fallSpeed += this.naveTerrestre.fallAcceleration * dt;
@@ -571,9 +467,10 @@ class BaseLevel {
 
     this.naveTerrestre.velocityY = 0;
 
-    // Controles de teclado o táctiles
-    const moveUp = this.keys.ArrowUp || this.touchControls.buttons.up.pressed;
-    const moveDown = this.keys.ArrowDown || this.touchControls.buttons.down.pressed;
+    const moveUp =
+      this.keys.ArrowUp || this.touchControls.isButtonPressed("up");
+    const moveDown =
+      this.keys.ArrowDown || this.touchControls.isButtonPressed("down");
 
     if (moveUp) {
       this.naveTerrestre.velocityY = -this.naveTerrestre.speed;
@@ -595,6 +492,9 @@ class BaseLevel {
     }
   }
 
+  /**
+   * Dispara una bala desde la nave del jugador
+   */
   shoot() {
     const bullet = {
       x: this.naveTerrestre.x + this.naveTerrestre.width,
@@ -609,30 +509,33 @@ class BaseLevel {
       image: loader.getImage("bala"),
     };
 
-    this.bullets.push(bullet);
+    this.entityManager.addBullet(bullet);
 
     this.canShoot = false;
     this.shootTimer = this.shootCooldown;
-    
-    // Reproducir sonido de disparo
+
     if (window.playSoundEffect) {
-      window.playSoundEffect('laserSound');
+      window.playSoundEffect("laserSound");
     }
 
-    console.log("¡Disparo! Balas activas:", this.bullets.length);
+    console.log(
+      "¡Disparo! Balas activas:",
+      this.entityManager.getBullets().length
+    );
   }
 
+  /**
+   * Actualiza todas las balas del jugador
+   * @param {number} dt - Tiempo delta en segundos
+   */
   updateBullets(dt) {
-    for (let i = this.bullets.length - 1; i >= 0; i--) {
-      const bullet = this.bullets[i];
-      bullet.x += bullet.speed * dt;
-
-      if (bullet.x > this.canvas.width) {
-        this.bullets.splice(i, 1);
-      }
-    }
+    this.entityManager.updateBullets(dt, this.canvas.width);
   }
 
+  /**
+   * Gestiona el temporizador de aparición de enemigos
+   * @param {number} dt - Tiempo delta en segundos
+   */
   updateEnemySpawn(dt) {
     if (this.enemiesSpawned >= this.maxEnemies) {
       return;
@@ -646,7 +549,9 @@ class BaseLevel {
     }
   }
 
-  // Método abstracto - puede ser sobrescrito en cada nivel para comportamiento específico
+  /**
+   * Crea una nueva nave enemiga (puede ser sobrescrito para comportamiento específico del nivel)
+   */
   spawnEnemy() {
     const minY = 50;
     const maxY = this.canvas.height - this.enemyHeight - 50;
@@ -673,7 +578,7 @@ class BaseLevel {
       fallAcceleration: 400,
     };
 
-    this.enemies.push(enemy);
+    this.entityManager.addEnemy(enemy);
     this.enemiesSpawned++;
     console.log(
       `Enemigo spawneado ${this.enemiesSpawned}/${
@@ -682,59 +587,59 @@ class BaseLevel {
     );
   }
 
+  /**
+   * Actualiza todas las naves enemigas
+   * @param {number} dt - Tiempo delta en segundos
+   */
   updateEnemies(dt) {
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const enemy = this.enemies[i];
-
-      if (enemy.isFalling) {
-        enemy.fallSpeed += enemy.fallAcceleration * dt;
-        enemy.y += enemy.fallSpeed * dt;
-
-        if (enemy.y > this.canvas.height) {
-          this.enemies.splice(i, 1);
-          console.log(
-            `Enemigo eliminado (cayó). Enemigos restantes: ${this.enemies.length}`
-          );
+    const enemies = this.entityManager.getEnemies();
+    this.entityManager.updateEnemies(
+      dt,
+      this.canvas.height,
+      (enemy, deltaTime) => {
+        if (enemy.isFalling) {
+          enemy.fallSpeed += enemy.fallAcceleration * deltaTime;
+          enemy.y += enemy.fallSpeed * deltaTime;
+          return;
         }
-        continue;
-      }
 
-      if (enemy.x > this.naveTerrestre.x + this.naveTerrestre.width + 50) {
-        enemy.x -= enemy.speed * dt;
-      }
+        if (enemy.x > this.naveTerrestre.x + this.naveTerrestre.width + 50) {
+          enemy.x -= enemy.speed * deltaTime;
+        }
 
-      enemy.y += enemy.verticalDirection * enemy.verticalSpeed * dt;
+        enemy.y += enemy.verticalDirection * enemy.verticalSpeed * deltaTime;
 
-      const distanceFromCenter = Math.abs(enemy.y - enemy.verticalCenter);
-      if (distanceFromCenter > enemy.verticalAmplitude / 2) {
-        enemy.verticalDirection *= -1;
-      }
+        const distanceFromCenter = Math.abs(enemy.y - enemy.verticalCenter);
+        if (distanceFromCenter > enemy.verticalAmplitude / 2) {
+          enemy.verticalDirection *= -1;
+        }
 
-      const minY = 0;
-      const maxY = this.canvas.height - enemy.height;
-      if (enemy.y < minY) {
-        enemy.y = minY;
-        enemy.verticalDirection = 1;
-      }
-      if (enemy.y > maxY) {
-        enemy.y = maxY;
-        enemy.verticalDirection = -1;
-      }
+        const minY = 0;
+        const maxY = this.canvas.height - enemy.height;
+        if (enemy.y < minY) {
+          enemy.y = minY;
+          enemy.verticalDirection = 1;
+        }
+        if (enemy.y > maxY) {
+          enemy.y = maxY;
+          enemy.verticalDirection = -1;
+        }
 
-      if (!enemy.isFalling) {
-        enemy.shootTimer += dt;
-        if (enemy.shootTimer >= this.enemyShootCooldown) {
-          this.enemyShoot(enemy);
-          enemy.shootTimer = 0;
+        if (!enemy.isFalling) {
+          enemy.shootTimer += deltaTime;
+          if (enemy.shootTimer >= this.enemyShootCooldown) {
+            this.enemyShoot(enemy);
+            enemy.shootTimer = 0;
+          }
         }
       }
-
-      if (enemy.x + enemy.width < 0) {
-        this.enemies.splice(i, 1);
-      }
-    }
+    );
   }
 
+  /**
+   * Dispara una bala desde una nave enemiga
+   * @param {Object} enemy - Objeto de la nave enemiga
+   */
   enemyShoot(enemy) {
     const bullet = {
       x: enemy.x,
@@ -746,89 +651,75 @@ class BaseLevel {
       image: loader.getImage("bala_enemiga"),
     };
 
-    this.enemyBullets.push(bullet);
+    this.entityManager.addEnemyBullet(bullet);
   }
 
+  /**
+   * Actualiza todas las balas enemigas
+   * @param {number} dt - Tiempo delta en segundos
+   */
   updateEnemyBullets(dt) {
-    for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
-      const bullet = this.enemyBullets[i];
-      bullet.x += bullet.speed * dt;
-
-      if (bullet.x + bullet.width < 0) {
-        this.enemyBullets.splice(i, 1);
-      }
-    }
+    this.entityManager.updateEnemyBullets(dt);
   }
 
-  // ========== DETECCIÓN DE COLISIONES ==========
-
+  /**
+   * Verifica colisiones entre todas las entidades del juego usando AABB
+   */
   checkCollisions() {
-    for (let i = this.bullets.length - 1; i >= 0; i--) {
-      const bullet = this.bullets[i];
+    const bullets = this.entityManager.getBullets();
+    const enemies = this.entityManager.getEnemies();
+    const enemyBullets = this.entityManager.getEnemyBullets();
 
-      for (let j = this.enemies.length - 1; j >= 0; j--) {
-        const enemy = this.enemies[j];
+    CollisionHelpers.checkBulletsVsEnemies(
+      bullets,
+      enemies,
+      (bullet, enemy, bulletIdx, enemyIdx) => {
+        if (enemy.hasShield && enemy.shieldHealth > 0) {
+          enemy.shieldHealth--;
+          console.log(
+            `¡Escudo impactado! Resistencia del escudo: ${enemy.shieldHealth}/${enemy.maxShieldHealth}`
+          );
 
-        if (enemy.isFalling) continue;
-
-        if (this.checkAABBCollision(bullet, enemy)) {
-          this.bullets.splice(i, 1);
-
-          // Verificar si el enemigo tiene escudo activo
-          if (enemy.hasShield && enemy.shieldHealth > 0) {
-            enemy.shieldHealth--;
-            console.log(
-              `¡Escudo impactado! Resistencia del escudo: ${enemy.shieldHealth}/${enemy.maxShieldHealth}`
-            );
-            
-            if (enemy.shieldHealth <= 0) {
-              console.log('¡Escudo destruido! Enemigo vulnerable.');
-            }
-          } else {
-            // Si no tiene escudo, dañar la nave
-            enemy.health--;
-            console.log(
-              `¡Impacto! Enemigo recibió daño. Salud restante: ${enemy.health}/${enemy.maxHealth}`
-            );
-
-            if (enemy.health <= 0) {
-              enemy.isFalling = true;
-              enemy.fallSpeed = 0;
-              this.enemiesDestroyed++;
-              console.log(
-                `¡Enemigo destruido! Total destruidos: ${this.enemiesDestroyed}/${this.maxEnemies}`
-              );
-            }
+          if (enemy.shieldHealth <= 0) {
+            console.log("¡Escudo destruido! Enemigo vulnerable.");
           }
+        } else {
+          enemy.health--;
+          console.log(
+            `¡Impacto! Enemigo recibió daño. Salud restante: ${enemy.health}/${enemy.maxHealth}`
+          );
 
-          break;
+          if (enemy.health <= 0) {
+            enemy.isFalling = true;
+            enemy.fallSpeed = 0;
+            this.enemiesDestroyed++;
+            console.log(
+              `¡Enemigo destruido! Total destruidos: ${this.enemiesDestroyed}/${this.maxEnemies}`
+            );
+          }
         }
       }
-    }
+    );
 
-    for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
-      const bullet = this.enemyBullets[i];
-
-      if (this.naveTerrestre.isFalling) continue;
-
-      if (this.checkAABBCollision(bullet, this.naveTerrestre)) {
-        this.enemyBullets.splice(i, 1);
-
+    CollisionHelpers.checkEnemyBulletsVsPlayer(
+      enemyBullets,
+      this.naveTerrestre,
+      (bullet, player) => {
         this.naveTerrestre.health -= this.enemyDamage;
         this.playerHealth = this.naveTerrestre.health;
-        
-        // Si es una bala venenosa, activar efecto de veneno
+
         if (bullet.isPoison) {
           this.poisonState.isPoisoned = true;
           this.poisonState.duration = this.poisonState.maxDuration;
           this.poisonState.damageTimer = 0;
-          console.log('⚠️ ALERTA: Sistemas electrónicos dañados - Virus detectado en la nave');
-          console.log('⚡ Energía de pulso EMP corrompiendo circuitos...');
+          console.log(
+            "ALERTA: Sistemas electrónicos dañados - Virus detectado en la nave"
+          );
+          console.log("Energía de pulso EMP corrompiendo circuitos...");
         }
-        
-        // Reproducir sonido de impacto
+
         if (window.playSoundEffect) {
-          window.playSoundEffect('impactSound');
+          window.playSoundEffect("impactSound");
         }
 
         console.log(
@@ -842,18 +733,12 @@ class BaseLevel {
           console.log("¡Nave terrestre destruida! Iniciando caída...");
         }
       }
-    }
-  }
-
-  checkAABBCollision(rect1, rect2) {
-    return (
-      rect1.x < rect2.x + rect2.width &&
-      rect1.x + rect1.width > rect2.x &&
-      rect1.y < rect2.y + rect2.height &&
-      rect1.y + rect1.height > rect2.y
     );
   }
 
+  /**
+   * Actualiza el progreso del nivel y verifica si está completado
+   */
   updateProgress() {
     if (this.maxEnemies > 0) {
       this.levelProgress = (this.enemiesDestroyed / this.maxEnemies) * 100;
@@ -875,11 +760,22 @@ class BaseLevel {
     }
   }
 
-  // ========== RENDERIZADO ==========
-
+  /**
+   * Renderiza toda la escena del juego
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado del canvas
+   */
   render(ctx) {
     if (this.isLoading) {
-      this.renderLoading(ctx);
+      const fondoCarga = loader.getImage("fondo_carga");
+      const progress = loader.getProgress();
+      RenderHelpers.renderLoadingScreen(
+        ctx,
+        this.canvas.width,
+        this.canvas.height,
+        this.levelNumber,
+        progress,
+        fondoCarga
+      );
       return;
     }
 
@@ -891,64 +787,27 @@ class BaseLevel {
     this.renderHUD(ctx);
   }
 
-  renderLoading(ctx) {
-    const fondoCarga = loader.getImage("fondo_carga");
-    if (fondoCarga) {
-      ctx.drawImage(fondoCarga, 0, 0, this.canvas.width, this.canvas.height);
-    } else {
-      ctx.fillStyle = "#0f0f10";
-      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    }
-
-    ctx.save();
-    ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
-
-    const time = Date.now() / 1000;
-    ctx.rotate(time * 2);
-
-    for (let i = 0; i < 8; i++) {
-      ctx.save();
-      ctx.rotate((Math.PI * 2 * i) / 8);
-      ctx.beginPath();
-      ctx.arc(30, 0, 5, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(75, 187, 221, ${1 - i * 0.12})`;
-      ctx.fill();
-      ctx.restore();
-    }
-
-    ctx.restore();
-
-    ctx.fillStyle = "#eee";
-    ctx.font = "24px system-ui";
-    ctx.textAlign = "center";
-    ctx.fillText(
-      `Cargando Nivel ${this.levelNumber}...`,
-      this.canvas.width / 2,
-      this.canvas.height / 2 + 80
-    );
-
-    const progress = loader.getProgress();
-    const barWidth = 400;
-    const barHeight = 20;
-    const barX = (this.canvas.width - barWidth) / 2;
-    const barY = this.canvas.height / 2 + 120;
-
-    ctx.strokeStyle = "#eee";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(barX, barY, barWidth, barHeight);
-    ctx.fillStyle = "#4bd";
-    ctx.fillRect(barX, barY, barWidth * progress, barHeight);
-  }
-
-  // Método abstracto - debe ser sobrescrito en cada nivel
+  /**
+   * Método abstracto: Renderiza las capas de fondo parallax
+   * @abstract
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado del canvas
+   */
   renderParallaxLayers(ctx) {
     throw new Error(
       "renderParallaxLayers() debe ser implementado en la subclase"
     );
   }
 
+  /**
+   * Renderiza las entidades del juego (balas, enemigos, jugador)
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado del canvas
+   */
   renderMainElements(ctx) {
-    this.bullets.forEach((bullet) => {
+    const bullets = this.entityManager.getBullets();
+    const enemies = this.entityManager.getEnemies();
+    const enemyBullets = this.entityManager.getEnemyBullets();
+
+    bullets.forEach((bullet) => {
       if (bullet.image) {
         ctx.drawImage(
           bullet.image,
@@ -963,7 +822,7 @@ class BaseLevel {
       }
     });
 
-    this.enemyBullets.forEach((bullet) => {
+    enemyBullets.forEach((bullet) => {
       if (bullet.image) {
         ctx.drawImage(
           bullet.image,
@@ -996,7 +855,7 @@ class BaseLevel {
       ctx.globalAlpha = 1.0;
     }
 
-    this.enemies.forEach((enemy) => {
+    enemies.forEach((enemy) => {
       if (enemy.image) {
         if (enemy.isFalling) {
           ctx.save();
@@ -1020,7 +879,7 @@ class BaseLevel {
           );
 
           const healthPercent = enemy.health / enemy.maxHealth;
-          this.renderHealthBar(
+          RenderHelpers.renderHealthBar(
             ctx,
             enemy.x,
             enemy.y - 10,
@@ -1036,6 +895,10 @@ class BaseLevel {
     });
   }
 
+  /**
+   * Renderiza los elementos del HUD (barra de vida, barra de progreso, controles)
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado del canvas
+   */
   renderHUD(ctx) {
     const menuImg = loader.getImage("menu");
     if (menuImg) {
@@ -1054,7 +917,7 @@ class BaseLevel {
       this.menuButton.height = scaledHeight;
     }
 
-    this.drawProgressBar(
+    RenderHelpers.drawProgressBar(
       ctx,
       this.bars.progress.x,
       this.bars.progress.y,
@@ -1067,7 +930,7 @@ class BaseLevel {
       "Progreso"
     );
 
-    this.drawProgressBar(
+    RenderHelpers.drawProgressBar(
       ctx,
       this.bars.health.x,
       this.bars.health.y,
@@ -1080,209 +943,26 @@ class BaseLevel {
       "Vida"
     );
 
-    // Indicador de daño electrónico (veneno)
     if (this.poisonState.isPoisoned) {
-      const poisonX = this.bars.health.x;
-      const poisonY = this.bars.health.y + 30;
-      
-      // Texto "SISTEMAS DAÑADOS" parpadeante
-      const alpha = Math.sin(Date.now() / 200) * 0.3 + 0.7;
-      ctx.fillStyle = `rgba(160, 0, 255, ${alpha})`;
-      ctx.font = "bold 14px system-ui";
-      ctx.textAlign = "left";
-      ctx.fillText("⚡ SISTEMAS DAÑADOS", poisonX, poisonY);
-      
-      // Barra de tiempo restante de daño
-      const poisonBarWidth = 200;
-      const poisonBarHeight = 8;
-      const poisonProgress = this.poisonState.duration / this.poisonState.maxDuration;
-      
-      // Fondo
-      ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-      ctx.fillRect(poisonX, poisonY + 5, poisonBarWidth, poisonBarHeight);
-      
-      // Progreso (morado eléctrico)
-      const barGradient = ctx.createLinearGradient(
-        poisonX, poisonY + 5,
-        poisonX + poisonBarWidth, poisonY + 5
+      RenderHelpers.renderPoisonIndicator(
+        ctx,
+        this.bars.health.x,
+        this.bars.health.y + 30,
+        this.poisonState.duration,
+        this.poisonState.maxDuration
       );
-      barGradient.addColorStop(0, '#d0f');
-      barGradient.addColorStop(0.5, '#a0d');
-      barGradient.addColorStop(1, '#80c');
-      ctx.fillStyle = barGradient;
-      ctx.fillRect(poisonX, poisonY + 5, poisonBarWidth * poisonProgress, poisonBarHeight);
-      
-      // Borde
-      ctx.strokeStyle = '#f0f';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(poisonX, poisonY + 5, poisonBarWidth, poisonBarHeight);
     }
 
-    // Renderizar controles táctiles si están habilitados
-    if (this.touchControls.enabled) {
-      this.renderTouchControls(ctx);
-    }
+    this.touchControls.render(ctx);
   }
 
-  drawProgressBar(
-    ctx,
-    x,
-    y,
-    width,
-    height,
-    percentage,
-    bgColor,
-    fillColor,
-    borderColor,
-    label
-  ) {
-    percentage = Math.max(0, Math.min(100, percentage));
-
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(x, y, width, height);
-
-    const fillWidth = (width * percentage) / 100;
-    ctx.fillStyle = fillColor;
-    ctx.fillRect(x, y, fillWidth, height);
-
-    ctx.strokeStyle = borderColor;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x, y, width, height);
-
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 12px system-ui";
-    ctx.textAlign = "left";
-    ctx.fillText(`${label}:`, x, y - 5);
-
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 11px system-ui";
-    ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-    ctx.shadowBlur = 3;
-    ctx.fillText(
-      `${Math.round(percentage)}%`,
-      x + width / 2,
-      y + height / 2 + 4
-    );
-    ctx.shadowBlur = 0;
-  }
-
-  renderHealthBar(ctx, x, y, width, height, healthPercent) {
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.fillRect(x, y, width, height);
-
-    let barColor;
-    if (healthPercent > 0.6) {
-      barColor = "#0f0";
-    } else if (healthPercent > 0.3) {
-      barColor = "#ff0";
-    } else {
-      barColor = "#f00";
-    }
-
-    const healthWidth = width * healthPercent;
-    ctx.fillStyle = barColor;
-    ctx.fillRect(x, y, healthWidth, height);
-
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, width, height);
-  }
-
-  // ========== CONTROLES TÁCTILES ==========
-
-  updateTouchControls() {
-    // Los estados de los botones se actualizan en handleTouchStart/Move/End
-  }
-
-  renderTouchControls(ctx) {
-    const buttons = this.touchControls.buttons;
-
-    // Botón Arriba
-    this.drawTouchButton(ctx, buttons.up.x, buttons.up.y, buttons.up.radius, buttons.up.pressed, '▲');
-
-    // Botón Abajo
-    this.drawTouchButton(ctx, buttons.down.x, buttons.down.y, buttons.down.radius, buttons.down.pressed, '▼');
-
-    // Botón Disparar
-    this.drawTouchButton(ctx, buttons.shoot.x, buttons.shoot.y, buttons.shoot.radius, buttons.shoot.pressed, '🎯', true);
-  }
-
-  drawTouchButton(ctx, x, y, radius, pressed, icon, isShoot = false) {
-    // Sombra
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 4;
-
-    // Círculo exterior
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = pressed ? 'rgba(100, 150, 255, 0.6)' : 'rgba(50, 50, 50, 0.5)';
-    ctx.fill();
-
-    // Resetear sombra
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-
-    // Borde
-    ctx.strokeStyle = pressed ? '#6cf' : '#fff';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    // Círculo interior
-    ctx.beginPath();
-    ctx.arc(x, y, radius - 10, 0, Math.PI * 2);
-    ctx.fillStyle = pressed ? 'rgba(120, 180, 255, 0.8)' : 'rgba(80, 80, 80, 0.7)';
-    ctx.fill();
-
-    // Icono/Texto
-    ctx.fillStyle = '#fff';
-    ctx.font = isShoot ? `${radius}px system-ui` : `bold ${radius * 0.8}px system-ui`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(icon, x, y);
-  }
-
-  handleTouchStart(x, y, touchId) {
-    // Verificar cada botón
-    for (let [buttonName, button] of Object.entries(this.touchControls.buttons)) {
-      const distance = Math.sqrt((x - button.x) ** 2 + (y - button.y) ** 2);
-      if (distance <= button.radius) {
-        button.pressed = true;
-        this.touchControls.activeTouches.set(touchId, buttonName);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  handleTouchMove(x, y, touchId) {
-    // Verificar si el toque se ha movido fuera del botón actual
-    const currentButton = this.touchControls.activeTouches.get(touchId);
-    if (currentButton) {
-      const button = this.touchControls.buttons[currentButton];
-      const distance = Math.sqrt((x - button.x) ** 2 + (y - button.y) ** 2);
-      if (distance > button.radius) {
-        button.pressed = false;
-        this.touchControls.activeTouches.delete(touchId);
-      }
-    }
-  }
-
-  handleTouchEnd(touchId) {
-    // Liberar el botón asociado a este toque
-    const buttonName = this.touchControls.activeTouches.get(touchId);
-    if (buttonName) {
-      this.touchControls.buttons[buttonName].pressed = false;
-      this.touchControls.activeTouches.delete(touchId);
-    }
-  }
-
-  // ========== MANEJO DE EVENTOS ==========
-
+  /**
+   * Maneja eventos de clic del mouse/táctil
+   * @param {number} x - Coordenada X del clic
+   * @param {number} y - Coordenada Y del clic
+   * @returns {string|undefined} Resultado de la acción
+   */
   handleClick(x, y) {
-    // Verificar botón de menú primero
     if (
       x >= this.menuButton.x &&
       x <= this.menuButton.x + this.menuButton.width &&
@@ -1298,26 +978,29 @@ class BaseLevel {
       return "menu";
     }
 
-    // Si los controles táctiles están habilitados, verificar clics en botones táctiles
-    if (this.touchControls.enabled) {
-      this.handleTouchStart(x, y, 'mouse');
-    }
+    this.touchControls.handleTouchStart(x, y, "mouse");
   }
 
+  /**
+   * Maneja eventos de movimiento del mouse
+   * @param {number} x - Coordenada X del mouse
+   * @param {number} y - Coordenada Y del mouse
+   */
   handleMouseMove(x, y) {
-    // Si hay un "toque" de mouse activo, actualizar posición
-    if (this.touchControls.enabled && this.touchControls.activeTouches.has('mouse')) {
-      this.handleTouchMove(x, y, 'mouse');
-    }
+    this.touchControls.handleTouchMove(x, y, "mouse");
   }
 
+  /**
+   * Maneja la liberación del botón del mouse
+   */
   handleMouseUp() {
-    // Liberar botones táctiles cuando se suelta el mouse
-    if (this.touchControls.enabled) {
-      this.handleTouchEnd('mouse');
-    }
+    this.touchControls.handleTouchEnd("mouse");
   }
 
+  /**
+   * Maneja la presión de una tecla del teclado
+   * @param {string} key - Nombre de la tecla
+   */
   handleKeyDown(key) {
     if (key === "ArrowUp" || key === "ArrowDown" || key === "ArrowRight") {
       this.keys[key] = true;
@@ -1333,14 +1016,19 @@ class BaseLevel {
     }
   }
 
+  /**
+   * Maneja la liberación de una tecla del teclado
+   * @param {string} key - Nombre de la tecla
+   */
   handleKeyUp(key) {
     if (key === "ArrowUp" || key === "ArrowDown" || key === "ArrowRight") {
       this.keys[key] = false;
     }
   }
 
-  // ========== REINICIO DEL NIVEL ==========
-
+  /**
+   * Reinicia el estado del nivel para comenzar de nuevo
+   */
   restart() {
     console.log(`Reiniciando Nivel ${this.levelNumber}`);
     this.isLoading = true;
@@ -1358,17 +1046,16 @@ class BaseLevel {
     this.naveTerrestre.isFalling = false;
     this.naveTerrestre.fallSpeed = 0;
 
-    this.bullets = [];
+    this.entityManager.clearAll();
+    this.physicsManager.clear();
+
     this.canShoot = true;
     this.shootTimer = 0;
 
-    this.enemies = [];
     this.enemySpawnTimer = 0;
     this.enemiesSpawned = 0;
     this.enemiesDestroyed = 0;
-    this.enemyBullets = [];
 
-    // Resetear estado de veneno
     this.poisonState.isPoisoned = false;
     this.poisonState.duration = 0;
     this.poisonState.damageTimer = 0;

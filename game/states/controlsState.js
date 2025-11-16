@@ -1,27 +1,40 @@
-// Estado de documentación de controles
+/**
+ * Estado que muestra la documentación de controles del juego
+ */
 import { loader } from "../../engine/loader.js";
 
 class ControlsState {
+  /**
+   * @param {HTMLCanvasElement} canvas - Lienzo del juego
+   * @param {Object} stateManager - Instancia del gestor de estados
+   */
   constructor(canvas, stateManager) {
     this.canvas = canvas;
     this.stateManager = stateManager;
 
-    // Posición del botón back
     this.buttons = {
       back: { x: 0, y: 0, width: 0, height: 0 },
     };
   }
 
+  /**
+   * Ciclo de vida del estado: Entrar al estado
+   */
   enter() {
     console.log("Entrando a pantalla de controles");
   }
 
-  update(dt) {
-    // No requiere actualización
-  }
+  /**
+   * Actualiza la lógica del estado
+   * @param {number} dt - Tiempo delta en segundos
+   */
+  update(dt) {}
 
+  /**
+   * Renderiza la pantalla de controles
+   * @param {CanvasRenderingContext2D} ctx - Contexto de renderizado del canvas
+   */
   render(ctx) {
-    // 1. Dibujar fondo desenfocado
     const fondoDesenfocado = loader.getImage("fondo_desenfocado");
     if (fondoDesenfocado) {
       ctx.drawImage(
@@ -33,7 +46,6 @@ class ControlsState {
       );
     }
 
-    // 2. Dibujar imagen de documentación de controles
     const controlesDoc = loader.getImage("controles_doc");
     if (controlesDoc) {
       const docX = (this.canvas.width - controlesDoc.width) / 2;
@@ -41,7 +53,6 @@ class ControlsState {
       ctx.drawImage(controlesDoc, docX, docY);
     }
 
-    // 3. Botón Back
     const backBtn = loader.getImage("back");
     if (backBtn) {
       const backX = 20;
@@ -58,13 +69,20 @@ class ControlsState {
     }
   }
 
+  /**
+   * Ciclo de vida del estado: Salir del estado
+   */
   exit() {
     console.log("Saliendo de pantalla de controles");
   }
 
-  // Manejar clics
+  /**
+   * Maneja eventos de clic del mouse
+   * @param {number} x - Coordenada X del clic
+   * @param {number} y - Coordenada Y del clic
+   * @returns {string|null} Acción realizada o null
+   */
   handleClick(x, y) {
-    // Verificar clic en Back
     if (
       x >= this.buttons.back.x &&
       x <= this.buttons.back.x + this.buttons.back.width &&
@@ -79,7 +97,10 @@ class ControlsState {
     return null;
   }
 
-  // Manejar teclas del teclado
+  /**
+   * Maneja la presión de una tecla del teclado
+   * @param {string} key - Nombre de la tecla
+   */
   handleKeyDown(key) {
     if (key === "Escape") {
       console.log("Tecla Escape presionada - Regresando a configuración");

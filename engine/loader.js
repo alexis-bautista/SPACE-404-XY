@@ -1,14 +1,32 @@
-// Sistema de precarga de assets (imágenes, audio)
+/**
+ * Sistema de precarga de assets (imágenes, audio)
+ * Gestiona la carga asíncrona de recursos del juego y proporciona
+ * seguimiento del progreso de carga
+ */
 
+/**
+ * Clase para gestionar la carga de recursos del juego
+ * @class Loader
+ */
 class Loader {
   constructor() {
+    /** @type {Object.<string, HTMLImageElement>} Mapa de imágenes cargadas por clave */
     this.images = {};
+    /** @type {Object.<string, HTMLAudioElement>} Mapa de sonidos cargados por clave (futuro uso) */
     this.sounds = {};
+    /** @type {number} Total de assets a cargar */
     this.totalAssets = 0;
+    /** @type {number} Número de assets cargados exitosamente */
     this.loadedAssets = 0;
   }
 
-  // Cargar una imagen
+  /**
+   * Carga una imagen de forma asíncrona
+   * @param {string} key - Identificador único para la imagen
+   * @param {string} src - Ruta del archivo de imagen
+   * @returns {Promise<HTMLImageElement>} Promise que se resuelve con la imagen cargada
+   * @throws {Error} Si la imagen no se puede cargar
+   */
   loadImage(key, src) {
     this.totalAssets++;
     return new Promise((resolve, reject) => {
@@ -26,7 +44,16 @@ class Loader {
     });
   }
 
-  // Cargar múltiples imágenes
+  /**
+   * Carga múltiples imágenes en paralelo
+   * @param {Object.<string, string>} imageMap - Objeto con pares clave-ruta de imágenes
+   * @returns {Promise<HTMLImageElement[]>} Promise que se resuelve cuando todas las imágenes están cargadas
+   * @example
+   * loader.loadImages({
+   *   'player': 'assets/player.png',
+   *   'enemy': 'assets/enemy.png'
+   * });
+   */
   loadImages(imageMap) {
     const promises = [];
     for (const [key, src] of Object.entries(imageMap)) {
@@ -35,21 +62,34 @@ class Loader {
     return Promise.all(promises);
   }
 
-  // Obtener una imagen cargada
+  /**
+   * Obtiene una imagen previamente cargada
+   * @param {string} key - Identificador de la imagen
+   * @returns {HTMLImageElement|undefined} La imagen cargada o undefined si no existe
+   */
   getImage(key) {
     return this.images[key];
   }
 
-  // Obtener progreso de carga (0 a 1)
+  /**
+   * Calcula el progreso de carga como porcentaje
+   * @returns {number} Valor entre 0 y 1 representando el progreso (0 = 0%, 1 = 100%)
+   */
   getProgress() {
     return this.totalAssets === 0 ? 1 : this.loadedAssets / this.totalAssets;
   }
 
-  // Verificar si todas las imágenes están cargadas
+  /**
+   * Verifica si todos los assets han sido cargados
+   * @returns {boolean} true si la carga está completa, false en caso contrario
+   */
   isComplete() {
     return this.loadedAssets === this.totalAssets;
   }
 }
 
-// Exportar instancia única del loader
+/**
+ * Instancia única del loader
+ * @type {Loader}
+ */
 export const loader = new Loader();
