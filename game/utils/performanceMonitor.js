@@ -73,8 +73,7 @@ class PerformanceMonitor {
 
     ctx.font = "10px monospace";
     ctx.fillStyle = "#aaa";
-    ctx.fillText("F3: Toggle | F4: Detalles", x + 10, y + boxHeight - 30);
-    ctx.fillText("Ctrl+F5: Reporte", x + 10, y + boxHeight - 15);
+    ctx.fillText("F3: Toggle | F4: Detalles", x + 10, y + boxHeight - 15);
 
     if (this.showDetailed) {
       const minFps =
@@ -171,56 +170,6 @@ class PerformanceMonitor {
         );
       }
     }
-  }
-
-  /**
-   * Obtiene un reporte completo del rendimiento
-   * @returns {Object} Reporte con FPS y tiempos de carga
-   */
-  getReport() {
-    const minFps =
-      this.fpsHistory.length > 0 ? Math.min(...this.fpsHistory) : this.fps;
-    const avgFps =
-      this.fpsHistory.length > 0
-        ? Math.round(
-            this.fpsHistory.reduce((a, b) => a + b, 0) / this.fpsHistory.length
-          )
-        : this.fps;
-
-    return {
-      current: this.fps,
-      min: minFps,
-      avg: avgFps,
-      history: [...this.fpsHistory],
-      loadTimes: { ...this.loadTimes },
-      meetsRequirement: minFps >= 45,
-    };
-  }
-
-  /**
-   * Imprime un reporte detallado del rendimiento en consola
-   */
-  printReport() {
-    const report = this.getReport();
-    console.log("\n══════════════════════════════════════");
-    console.log("REPORTE DE RENDIMIENTO");
-    console.log("═══════════════════════════════════════");
-    console.log(`FPS Actual:   ${report.current}`);
-    console.log(`FPS Mínimo:   ${report.min} ${report.min >= 45 ? "✓" : "✗"}`);
-    console.log(`FPS Promedio: ${report.avg}`);
-    console.log(
-      `Cumple requisito (≥45 FPS): ${report.meetsRequirement ? "✓ SÍ" : "✗ NO"}`
-    );
-    console.log("───────────────────────────────────────");
-    console.log("TIEMPOS DE CARGA:");
-
-    Object.entries(report.loadTimes).forEach(([name, data]) => {
-      if (data.duration !== null) {
-        const status = data.duration < 100 ? "✓" : "⚠️";
-        console.log(`  ${status} ${name}: ${data.duration.toFixed(2)}ms`);
-      }
-    });
-    console.log("═══════════════════════════════════════\n");
   }
 
   /**
